@@ -1,0 +1,8 @@
+{
+	"name": "tweetnacl",
+	"description": "A minimal D application.",
+	"copyright": "Copyright © 2014, t",
+	"authors": ["t"],
+	"dependencies": {
+	}
+}
