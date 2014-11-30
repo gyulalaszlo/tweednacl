@@ -46,9 +46,6 @@ const(ubyte)[] toBytes(T)(T[] input)
   return (cast(const(ubyte)*)(&input[0]))[0..(input.length*T.sizeof)];
 }
 
-/*
-   internal types
-   */
 alias gf = long[16];
 
 
@@ -115,8 +112,15 @@ private int vn(const ubyte[] x,const ubyte[] y,int n)
 }
 
 /**
-  Compares two  byte arrays in constant time.
-  Returns 0 if the two array match.
+  The crypto_verify_16 function returns 0 if x[0], x[1], ..., x[15] are the
+  same as y[0], y[1], ..., y[15]. Otherwise it returns -1.
+
+  This function is safe to use for secrets x[0], x[1], ..., x[15], y[0], y[1],
+  ..., y[15]. The time taken by crypto_verify_16 is independent of the contents
+  of x[0], x[1], ..., x[15], y[0], y[1], ..., y[15]. In contrast, the standard C
+  comparison function memcmp(x,y,16) takes time that depends on the longest
+  matching prefix of x and y, often allowing easy timing attacks.
+
  */
 int crypto_verify_16(ref const ubyte[16] x, ref const ubyte[16] y)
 {
@@ -124,8 +128,8 @@ int crypto_verify_16(ref const ubyte[16] x, ref const ubyte[16] y)
 }
 
 /**
-  Compares two  byte arrays in constant time.
-  Returns 0 if the two array match.
+  Similar verification function as crypto_verify_16 , but operating on 32
+  byte blocks.
  */
 int crypto_verify_32(ref const ubyte[32] x, ref const ubyte[32] y)
 {
@@ -178,7 +182,7 @@ private void core(UseHSalsa useHSalsa)(
 }
 
 int crypto_core_salsa20(
-    ref ubyte[crypto_core_salsa20_tweet_OUTPUTBYTES] output,
+    ref ubyte[crypto_core_salsa20_OUTPUTBYTES] output,
     ref const ubyte[crypto_core_salsa20_INPUTBYTES] input,
     ref const ubyte[crypto_core_salsa20_KEYBYTES] k,
     ref const ubyte[crypto_core_salsa20_CONSTBYTES] c)
@@ -1748,9 +1752,8 @@ private const ulong[80] K = [
 ];
 
 /**
-  NOTE: this function is a public API function in NaCl, but private in this library.
 */
-private size_t crypto_hashblocks(ref ubyte[crypto_hash_BYTES] x, const(ubyte)[] m)
+size_t crypto_hashblocks(ref ubyte[crypto_hashblocks_STATEBYTES] x, const(ubyte)[] m)
 {
   size_t n = m.length;
   ulong[8] z,b,a;
@@ -2184,8 +2187,8 @@ unittest {
     }
   }
 
-  ubyte extracted_seed[crypto_sign_ed25519_SEEDBYTES];
-  ubyte extracted_pk[crypto_sign_ed25519_PUBLICKEYBYTES];
+  ubyte extracted_seed[crypto_sign_SEEDBYTES];
+  ubyte extracted_pk[crypto_sign_PUBLICKEYBYTES];
   ubyte sig[crypto_sign_BYTES];
   ubyte sm[1024 + crypto_sign_BYTES];
   ubyte m[1024];
@@ -2234,20 +2237,6 @@ unittest {
         format("message can be forged: [%s]", i));
     assert( !crypto_sign_open(m, mlen, signedMsg[0..i % crypto_sign_BYTES], test_data[i].pk),
         format("short signed message verifies: [%s - %s]", i, i % crypto_sign_BYTES) );
-  }
-
-  i--;
-
-
-  enum canHandleOverlappingBuffers = false;
-  static if (canHandleOverlappingBuffers) {
-    auto signedMsgLen = crypto_sign_BYTES+i;
-    sm[0..i] = toBytes(test_data[i].m)[0..i];
-    assert(crypto_sign(sm[0..signedMsgLen], smlen, sm[0..i], skpk), "crypto_sign() with overlap failed");
-    assert(smlen == signedMsgLen);
-    writefln("%s -- %s", signedMsgLen, toHexString(sm[0..signedMsgLen]));
-    assert(crypto_sign_open(sm, mlen, sm[0..smlen], test_data[i].pk), "crypto_sign_open() with overlap failed");
-    assert(toBytes(test_data[i].m)[0..mlen] ==  sm[0..mlen], "crypto_sign_open() with overlap failed (content)");
   }
 }
 
