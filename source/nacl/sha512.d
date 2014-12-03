@@ -26,8 +26,8 @@
   This implementation of SHA-512 is ~4x slower then the std.digest.sha
   implementation.
 */
-module nacl.hash;
-import nacl.constants;
+module nacl.sha512;
+//import nacl.constants;
 
 
 struct SHA512 {
@@ -41,6 +41,7 @@ struct SHA512 {
   enum Bytes = 64;
 
   alias HashValue = ubyte[Bytes];
+  alias Value = HashValue;
 }
 
 struct SHA512Hashblocks {
@@ -62,7 +63,7 @@ struct SHA512Hashblocks {
   The crypto_hash function hashes a message m[0], m[1], ..., m[m.length-1]. It puts
   the hash into h[0], h[1], ..., h[crypto_hash_BYTES-1].
 */
-pure nothrow @safe @nogc void crypto_hash( ref SHA512.HashValue output,//ubyte[crypto_hash_BYTES] output,
+pure nothrow @safe @nogc void crypto_hash( ref SHA512.HashValue output,
     const(ubyte)[] m )
 {
   import nacl.basics : ts64;

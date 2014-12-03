@@ -17,7 +17,7 @@
   in "Cryptography in NaCl", Section 9. This authenticator is proven to meet
   the standard notion of unforgeability after a single message.
 */
-module nacl.onetimeauth;
+module nacl.poly1305;
 
 import nacl.basics;
 
@@ -45,10 +45,8 @@ struct Poly1305 {
 */
 pure nothrow @safe @nogc
 int crypto_onetimeauth(
-    //ref ubyte[crypto_onetimeauth_BYTES] output,
     ref Poly1305.Value output,
     const(ubyte)[] m,
-    //ref const ubyte[crypto_onetimeauth_KEYBYTES] k)
     ref const Poly1305.Key k)
 {
   uint s,u;
@@ -116,9 +114,9 @@ int crypto_onetimeauth(
 */
 pure nothrow @safe @nogc
 bool crypto_onetimeauth_verify(
-    ref const Poly1305.Value h, //ubyte[crypto_onetimeauth_BYTES] h,
+    ref const Poly1305.Value h,
     const ubyte[] m,
-    ref const Poly1305.Key k) //ubyte[crypto_onetimeauth_KEYBYTES] k)
+    ref const Poly1305.Key k)
 {
   ubyte x[16];
   crypto_onetimeauth(x,m,k);
@@ -127,7 +125,8 @@ bool crypto_onetimeauth_verify(
 
 private:
 
-pure nothrow @safe @nogc void add1305(ref uint[17] h, ref const uint[17] c)
+pure nothrow @safe @nogc
+void add1305(ref uint[17] h, ref const uint[17] c)
 {
   uint u = 0;
   foreach(j;0..17) {
@@ -181,10 +180,7 @@ unittest {
     foreach(ref k;key) k = uniform(ubyte.min, ubyte.max);
     foreach(ref v;currentC) v = uniform(ubyte.min, ubyte.max);
     crypto_onetimeauth(a, currentC, key);
-    if (!crypto_onetimeauth_verify(a, currentC, key)) {
-      writefln("fail %d", clen);
-      assert(false);
-    }
+    assert (crypto_onetimeauth_verify(a, currentC, key));
     if (clen > 0) {
       currentC[uniform(0u, clen)] += 1 + (uniform(0u, 255u));
       assert( !crypto_onetimeauth_verify(a, currentC, key), "forgery");

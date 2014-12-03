@@ -1,9 +1,8 @@
-module nacl.sign;
+module nacl.ed25519;
 
-import nacl.constants;
 import nacl.basics;
 import nacl.math25519;
-import nacl.hash;
+import nacl.sha512 : SHA512;
 
 
 // Description primitive for Ed25519
@@ -25,6 +24,7 @@ struct Ed25519 {
   alias SecretKey = ubyte[SecretKeyBytes];
 }
 
+private alias Hash = SHA512;
 
 /**
   The crypto_sign_keypair function randomly generates a secret key and a
@@ -37,14 +37,14 @@ Params:
   pk = the output for the public key
   sk = the output for the secret key
  */
-bool crypto_sign_keypair(alias safeRnd)(ref ubyte[crypto_sign_PUBLICKEYBYTES] pk,
-   ref ubyte[crypto_sign_SECRETKEYBYTES] sk)
+bool crypto_sign_keypair(alias safeRnd)(ref ubyte[Ed25519.PublicKeyBytes] pk,
+   ref ubyte[Ed25519.SecretKeyBytes] sk)
 {
-  ubyte d[64];
+  Hash.Value d;
   gf p[4];
 
   safeRnd(sk, 32);
-  crypto_hash(d, sk[0..32]);
+  Hash.hash(d, sk[0..32]);
   d[0] &= 248;
   d[31] &= 127;
   d[31] |= 64;
@@ -68,19 +68,17 @@ bool crypto_sign_keypair(alias safeRnd)(ref ubyte[crypto_sign_PUBLICKEYBYTES] pk
 */
 pure nothrow @safe @nogc
 bool crypto_sign(ubyte[] sm, out ulong smlen, const ubyte[] m,
-    ref const ubyte[crypto_sign_SECRETKEYBYTES] sk)
+    ref const ubyte[Ed25519.SecretKeyBytes] sk)
 in {
-  assert( sm.length >= m.length + crypto_sign_BYTES,
-      "crypto_sign() The caller must allocate at least mlen+crypto_sign_BYTES bytes for sm." );
+  assert( sm.length >= m.length + Ed25519.Bytes );
 }
 body {
   size_t n = m.length;
-  ubyte[64] d,h,r;
-  //long i,j;
+  Hash.Value d,h,r;
   long[64] x;
   gf p[4];
 
-  crypto_hash(d, sk[0..32]);
+  Hash.hash(d, sk[0..32]);
   d[0] &= 248;
   d[31] &= 127;
   d[31] |= 64;
@@ -89,13 +87,13 @@ body {
   foreach(i;0..n) sm[64 + i] = m[i];
   foreach(i;0..32) sm[32 + i] = d[32 + i];
 
-  crypto_hash(r, sm[32..32+n+32]); //, n+32);
+  Hash.hash(r, sm[32..32+n+32]); //, n+32);
   reduce(r);
   scalarbase(p,r[0..32]);
   pack(sm[0..32],p);
 
   foreach(i;0..32) sm[i+32] = sk[i+32];
-  crypto_hash(h,sm[0..n+64]);
+  Hash.hash(h,sm[0..n+64]);
   reduce(h);
 
   foreach(i;0..64) x[i] = 0;
@@ -122,17 +120,14 @@ body {
    */
 pure nothrow @safe @nogc
 bool crypto_sign_open(ubyte[] m, ref ulong mlen, const ubyte[] sm,
-    ref const ubyte[crypto_sign_PUBLICKEYBYTES] pk)
+    ref const ubyte[Ed25519.PublicKeyBytes] pk)
 in {
-  // The following unittest makes one of the test fail
-  //assert( sm.length >= crypto_sign_BYTES );
-  assert( m.length >= sm.length,
-      "crypto_sign_open() The caller must allocate at least sm.length bytes for m." );
+  assert( m.length >= sm.length );
 }
 body {
   size_t n = sm.length;
   ubyte[32] t;
-  ubyte[64] h;
+  Hash.Value h;
   gf[4] p,q;
 
   mlen = -1;
@@ -142,7 +137,7 @@ body {
 
   foreach(i;0..n) m[i] = sm[i];
   foreach(i;0..32) m[i+32] = pk[i];
-  crypto_hash(h,m[0..n]);
+  Hash.hash(h,m[0..n]);
   reduce(h);
   scalarmult(p,q,h[0..32]);
 
@@ -336,16 +331,12 @@ unittest {
     }
   }
 
-  ubyte extracted_seed[crypto_sign_SEEDBYTES];
-  ubyte extracted_pk[crypto_sign_PUBLICKEYBYTES];
-  ubyte sig[crypto_sign_BYTES];
-  ubyte sm[1024 + crypto_sign_BYTES];
+  ubyte[Ed25519.Bytes] sig;
+  ubyte sm[1024 + Ed25519.Bytes];
   ubyte m[1024];
-  ubyte skpk[crypto_sign_SECRETKEYBYTES];
-  ubyte pk[crypto_sign_PUBLICKEYBYTES];
-  ubyte sk[crypto_sign_SECRETKEYBYTES];
-  char          pk_hex[crypto_sign_PUBLICKEYBYTES * 2 + 1];
-  char          sk_hex[crypto_sign_SECRETKEYBYTES * 2 + 1];
+  ubyte[Ed25519.SecretKeyBytes] skpk;
+  ubyte[Ed25519.PublicKeyBytes] pk;
+  ubyte[Ed25519.SecretKeyBytes] sk;
 
   ulong siglen;
   ulong smlen;
@@ -357,11 +348,11 @@ unittest {
   import std.string;
   import std.digest.sha : toHexString;
   for (i = 0U; i < test_data.length; i++) {
-    skpk[0..crypto_sign_SEEDBYTES] = test_data[i].sk[];
-    skpk[crypto_sign_SEEDBYTES..crypto_sign_SEEDBYTES + crypto_sign_PUBLICKEYBYTES] =
-      test_data[i].pk[0..crypto_sign_PUBLICKEYBYTES];
+    skpk[0..Ed25519.SeedBytes] = test_data[i].sk[];
+    skpk[Ed25519.SeedBytes..Ed25519.SeedBytes + Ed25519.PublicKeyBytes] =
+      test_data[i].pk[0..Ed25519.PublicKeyBytes];
 
-    auto signedMsgLen = crypto_sign_BYTES+i;
+    auto signedMsgLen = Ed25519.Bytes+i;
     auto inputMsg = toBytes(test_data[i].m);
 
     assert( crypto_sign(sm[0..signedMsgLen], smlen, inputMsg, skpk),
@@ -370,7 +361,7 @@ unittest {
     assert(smlen == signedMsgLen, "signed message has incorrect lenght");
     auto signedMsg = sm[0..smlen];
 
-    assert( test_data[i].sig[0..crypto_sign_BYTES] == sm[0..crypto_sign_BYTES],
+    assert( test_data[i].sig[0..Ed25519.Bytes] == sm[0..Ed25519.Bytes],
         format("signature failure: [%s]", i ));
 
     assert( crypto_sign_open(m, mlen, signedMsg, test_data[i].pk),
@@ -381,11 +372,11 @@ unittest {
     assert( toBytes(test_data[i].m) == m[0..mlen],
         format("message verification failure: [%s]", i) );
 
-    sm[i + crypto_sign_BYTES - 1U]++;
+    sm[i + Ed25519.Bytes - 1U]++;
     assert(!crypto_sign_open(m, mlen, signedMsg, test_data[i].pk),
         format("message can be forged: [%s]", i));
-    assert( !crypto_sign_open(m, mlen, signedMsg[0..i % crypto_sign_BYTES], test_data[i].pk),
-        format("short signed message verifies: [%s - %s]", i, i % crypto_sign_BYTES) );
+    assert( !crypto_sign_open(m, mlen, signedMsg[0..i % Ed25519.Bytes], test_data[i].pk),
+        format("short signed message verifies: [%s - %s]", i, i % Ed25519.Bytes) );
   }
 }
 
@@ -394,21 +385,25 @@ unittest
 {
   import std.random;
 
-  ubyte[crypto_sign_PUBLICKEYBYTES] pk;
-  ubyte[crypto_sign_SECRETKEYBYTES] sk;
+  ubyte[Ed25519.PublicKeyBytes] pk;
+  ubyte[Ed25519.SecretKeyBytes] sk;
   assert(crypto_sign_keypair!safeRandomBytes(pk, sk) );
 
+  enum maxLen = 2 << testMessageLengthsUpTo + 1;
 
-  ubyte[testMessageLengthsUpTo] msgBuf;
-  ubyte[testMessageLengthsUpTo + crypto_sign_BYTES] decodedMsgBuf;
-  ubyte[testMessageLengthsUpTo + crypto_sign_BYTES] signedMsgBuf;
+  ubyte[maxLen] msgBuf;
+  ubyte[maxLen + Ed25519.Bytes] decodedMsgBuf;
+  ubyte[maxLen + Ed25519.Bytes] signedMsgBuf;
   ulong msgLen, signedMsgLen;
   // generate a random message and test if it can be signed/opened
   // with a keypair.
-  foreach(mlen;0..testMessageLengthsUpTo) {
+  foreach(i;0..testMessageLengthsUpTo) {
+    const mlen = (2 << i) + i;
+    import std.stdio;
+    writefln("%s", mlen);
     import nacl.basics : safeRandomBytes;
     auto msg = msgBuf[0..mlen];
-    auto signedMsg = signedMsgBuf[0..mlen+crypto_sign_BYTES];
+    auto signedMsg = signedMsgBuf[0..mlen+Ed25519.Bytes];
     randomBuffer(msg[0..mlen]);
 
     assert( crypto_sign( signedMsg, signedMsgLen, msg,  sk ));
@@ -419,9 +414,9 @@ unittest
     assert( decodedMsgBuf[0..msgLen] == msg[0..mlen] );
 
     if (mlen == 0) continue;
-    foreach(j;0..10)
+    foreach(j;0..3)
     {
-      signedMsg[uniform(crypto_sign_BYTES, signedMsgLen)] = uniform(ubyte.min, ubyte.max);
+      signedMsg[uniform(Ed25519.Bytes, signedMsgLen)] = uniform(ubyte.min, ubyte.max);
       if (crypto_sign_open( decodedMsgBuf[0..signedMsgLen], msgLen, signedMsg,  pk ))
       {
         assert( msgLen == mlen );

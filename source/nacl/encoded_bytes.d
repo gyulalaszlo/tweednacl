@@ -20,14 +20,13 @@ private T lcm(T)(T a, T b)
 private bool isPowerOf2(T)(T x) { return x && !(x & (x - 1)); }
 
 
-// Get the bit count for a given length
+/**
+  Get the bit count for a given alphabet size
+  */
 private size_t bitCount( size_t len ) {
   if (len == 0) return 0;
   auto bits = 0;
-  while(len > 0) {
-    len /= 2;
-    bits++;
-  }
+  while(len > 0) { len /= 2; bits++; }
   return bits-1;
 }
 
@@ -37,13 +36,46 @@ unittest {
 }
 
 
-
+/**
+  Returns a bit mask to grab a number of bits from a ubytes end.
+  ---
+  0 -> 0b00000000,
+  1 -> 0b00000001,
+  2 -> 0b00000011,
+  3 -> 0b00000111,
+  4 -> 0b00001111,
+  5 -> 0b00011111,
+  6 -> 0b00111111,
+  7 -> 0b01111111,
+  8 -> 0b11111111,
+  ---
+Params:
+  bits = the number of bits
+  */
+ubyte getBitMask(ubyte bits)
+in {
+  assert( bits <= 8 );
+}
+body {
+  enum BitMasks = [
+    0b00000000,
+    0b00000001,
+    0b00000011,
+    0b00000111,
+    0b00001111,
+    0b00011111,
+    0b00111111,
+    0b01111111,
+    0b11111111,
+    ];
+  return cast(ubyte)(BitMasks[bits]);
+}
 
 
 /**
   Converts data to a string using characters from the passed alphabet.
   */
-private string toByteStringImpl(string alphabet="0123456789abcdef")(const(ubyte)[] bytes)
+template toByteStringImpl(string alphabet="0123456789abcdef", char paddingChar='=')
 {
   static assert( isPowerOf2( alphabet.length ) );
   import std.array;
@@ -56,58 +88,50 @@ private string toByteStringImpl(string alphabet="0123456789abcdef")(const(ubyte)
   enum lettersPerGroup = bitsPerLetterGroup / alphabetBits;
   enum bytesPerGroup = bitsPerLetterGroup / dataBits;
 
-  enum Masks = [
-    0b00000000,
-    0b00000001,
-    0b00000011,
-    0b00000111,
-    0b00001111,
-    0b00011111,
-    0b00111111,
-    0b01111111,
-    0b11111111,
-    ];
-  enum letterMask = Masks[alphabetBits];
+  enum letterMask = getBitMask(alphabetBits);
 
   alias Buf = ulong;
 
-  immutable bytesLen = bytes.length;
-  if (bytesLen == 0) return "";
+  string toByteStringImpl(const(ubyte)[] bytes)
+  {
+    immutable bytesLen = bytes.length;
+    if (bytesLen == 0) return "";
 
-  auto byteCount = bytes.length;
-  auto byteIdx = &bytes[0];
-  auto o = appender!string;
-  Buf buffer;
+    auto byteCount = bytes.length;
+    auto byteIdx = &bytes[0];
+    auto o = appender!string;
+    Buf buffer;
 
-  while(byteCount > 0) {
-    size_t padBytes = 0;
-    size_t maxLetters = lettersPerGroup;
+    while(byteCount > 0) {
+      size_t padBytes = 0;
+      size_t maxLetters = lettersPerGroup;
 
-    if (byteCount >= bytesPerGroup) {
-      buffer = bigEndianToNative!Buf(byteIdx[0..Buf.sizeof]);
-      byteCount -= bytesPerGroup;
-    } else {
-      ubyte[Buf.sizeof] b;
-      b[0..byteCount] = byteIdx[0..byteCount];
-      buffer = bigEndianToNative!Buf(b);
-      padBytes = bytesPerGroup - byteCount;
-      // include the possibly padded last letter
-      maxLetters = (byteCount * 8) / alphabetBits + 1;
-      byteCount = 0;
+      if (byteCount >= bytesPerGroup) {
+        buffer = bigEndianToNative!Buf(byteIdx[0..Buf.sizeof]);
+        byteCount -= bytesPerGroup;
+      } else {
+        ubyte[Buf.sizeof] b;
+        b[0..byteCount] = byteIdx[0..byteCount];
+        buffer = bigEndianToNative!Buf(b);
+        padBytes = bytesPerGroup - byteCount;
+        // include the possibly padded last letter
+        maxLetters = (byteCount * 8) / alphabetBits + 1;
+        byteCount = 0;
+      }
+
+      foreach(i;0..maxLetters) {
+        size_t idx = (buffer >> ( (Buf.sizeof * 8) - alphabetBits)) & letterMask;
+        buffer = buffer << alphabetBits;
+        o ~= alphabet[idx];
+      }
+
+      if (padBytes > 0)
+        foreach(i;0..lettersPerGroup-maxLetters) o ~= paddingChar;
+
+      byteIdx += bytesPerGroup;
     }
-
-    foreach(i;0..maxLetters) {
-      size_t idx = (buffer >> ( (Buf.sizeof * 8) - alphabetBits)) & letterMask;
-      buffer = buffer << alphabetBits;
-      o ~= alphabet[idx];
-    }
-
-    if (padBytes > 0)
-      foreach(i;0..lettersPerGroup-maxLetters) o ~= "=";
-
-    byteIdx += bytesPerGroup;
+    return o.data;
   }
-  return o.data;
 }
 
 string bytesToBinary(T)(T[] data) {

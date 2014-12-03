@@ -24,10 +24,9 @@
   conjectured to meet the standard notions of privacy and authenticity.
 
 */
-module nacl.secretbox;
+module nacl.xsalsa20poly1305;
 
-import nacl.constants;
-import nacl.onetimeauth;
+import nacl.poly1305 : Poly1305;
 import nacl.stream;
 
 struct XSalsa20Poly1305 {
@@ -37,7 +36,9 @@ struct XSalsa20Poly1305 {
 
   enum KeyBytes = 32;
   enum NonceBytes = 24;
+  /** The number of 0 bytes in front of the plaintext */
   enum ZeroBytes = 32;
+  /** The number of 0 bytes in front of the encrypted box. */
   enum BoxZeroBytes = 16;
 
   alias secretbox = crypto_secretbox;
@@ -83,15 +84,17 @@ struct XSalsa20Poly1305 {
   ---
 
 */
-pure nothrow @safe @nogc bool crypto_secretbox(ubyte[] c,const ubyte[] m,
-    ref const XSalsa20Poly1305.Nonce n, // const ubyte[crypto_secretbox_NONCEBYTES] n,
-    ref const XSalsa20Poly1305.Key k) //ref const ubyte[crypto_secretbox_KEYBYTES] k)
+pure nothrow @safe @nogc
+bool crypto_secretbox(
+    ubyte[] c,const ubyte[] m,
+    ref const XSalsa20Poly1305.Nonce n,
+    ref const XSalsa20Poly1305.Key k)
 {
   immutable d = m.length;
-  if (d < 32) return false;
+  if (d < XSalsa20Poly1305.ZeroBytes) return false;
   crypto_stream_xor(c,m,d,n,k);
-  crypto_onetimeauth(c[16..32],c[32..$],c[0..32]);
-  foreach(i;0..16) c[i] = 0;
+  Poly1305.onetimeauth(c[16..32],c[32..$],c[0..32]);
+  foreach(i;0..XSalsa20Poly1305.BoxZeroBytes) c[i] = 0;
   return true;
 }
 
@@ -129,22 +132,22 @@ pure nothrow @safe @nogc bool crypto_secretbox(ubyte[] c,const ubyte[] m,
   ---
 
   */
-pure nothrow @safe @nogc bool crypto_secretbox_open(ubyte[] m, const ubyte[] c,
-    ref const XSalsa20Poly1305.Nonce n, // const ubyte[crypto_secretbox_NONCEBYTES] n,
-    ref const XSalsa20Poly1305.Key k) //ref const ubyte[crypto_secretbox_KEYBYTES] k)
-    //ref const ubyte[crypto_secretbox_NONCEBYTES] n,
-    //ref const ubyte[crypto_secretbox_KEYBYTES] k)
+pure nothrow @safe @nogc
+bool crypto_secretbox_open(
+    ubyte[] m, const ubyte[] c,
+    ref const XSalsa20Poly1305.Nonce n,
+    ref const XSalsa20Poly1305.Key k)
 in {
-  foreach(i;0..crypto_secretbox_BOXZEROBYTES) assert( c[i] == 0 );
+  foreach(i;0..XSalsa20Poly1305.BoxZeroBytes) assert( c[i] == 0 );
 }
 body {
   immutable d = c.length;
-  if (d < 32) return false;
+  if (d < XSalsa20Poly1305.ZeroBytes) return false;
   ubyte x[32];
   crypto_stream(x,32,n,k);
-  if (!crypto_onetimeauth_verify(c[16..32], c[32..d],x)) return false;
+  if (!Poly1305.onetimeauthVerify(c[16..32], c[32..d],x)) return false;
   crypto_stream_xor(m,c,d,n,k);
-  foreach(i;0..32) m[i] = 0;
+  foreach(i;0..XSalsa20Poly1305.ZeroBytes) m[i] = 0;
   return true;
 }
 
@@ -210,47 +213,52 @@ unittest
   import std.random;
   import nacl.basics : randomBuffer;
 
-  ubyte k[crypto_secretbox_KEYBYTES];
-  ubyte n[crypto_secretbox_NONCEBYTES];
-  ubyte m[10000];
-  ubyte c[10000];
-  ubyte m2[10000];
+
+  void testSecretbox(Impl)() {
+    Impl.Key k;
+    Impl.Nonce n;
+    ubyte m[10000];
+    ubyte c[10000];
+    ubyte m2[10000];
 
 
-  size_t mlen;
-  size_t i;
-  for (mlen = 0; mlen < 1000 && mlen + crypto_secretbox_ZEROBYTES < m.length;
-      mlen = (mlen << 1) + 1) {
-    immutable msgBlockLen = mlen + crypto_secretbox_ZEROBYTES;
-    randomBuffer(k);
-    randomBuffer(n);
-    m[0..crypto_secretbox_ZEROBYTES] = 0;
-    randomBuffer(m[crypto_secretbox_ZEROBYTES..msgBlockLen]);
+    size_t mlen;
+    size_t i;
+    for (mlen = 0; mlen < 1000 && mlen + Impl.ZeroBytes < m.length;
+        mlen = (mlen << 1) + 1) {
+      immutable msgBlockLen = mlen + Impl.ZeroBytes;
+      randomBuffer(k);
+      randomBuffer(n);
+      m[0..Impl.ZeroBytes] = 0;
+      randomBuffer(m[Impl.ZeroBytes..msgBlockLen]);
 
-    auto currentC = c[0..msgBlockLen];
-    currentC[] = 0;
+      auto currentC = c[0..msgBlockLen];
+      currentC[] = 0;
 
-    crypto_secretbox( currentC, m[0..msgBlockLen], n, k );
-    assert(crypto_secretbox_open(m2[0..msgBlockLen], currentC[], n, k),
-        "ciphertext fails verification");
-    assert( m2[0..msgBlockLen] == m[0..msgBlockLen] );
+      Impl.secretbox( currentC, m[0..msgBlockLen], n, k );
+      assert(Impl.secretboxOpen(m2[0..msgBlockLen], currentC[], n, k),
+          "ciphertext fails verification");
+      assert( m2[0..msgBlockLen] == m[0..msgBlockLen] );
 
-    auto caught = 0;
-    while (caught < 10) {
-      // change a random byte
-      auto idx = uniform(0u, mlen + crypto_secretbox_ZEROBYTES);
-      c[idx] = uniform(ubyte.min, ubyte.max);
-      // fix any errors that might trigger the first crypto_secretbox_ZEROBYTES
-      // to be not 0, and thats invalid for the crypto_secretbox_open() interface
-      // (it seems to work but the docs say they should not)
-      c[0..crypto_secretbox_ZEROBYTES] = 0;
+      auto caught = 0;
+      while (caught < 10) {
+        // change a random byte
+        auto idx = uniform(0u, mlen + Impl.ZeroBytes);
+        c[idx] = uniform(ubyte.min, ubyte.max);
+        // fix any errors that might trigger the first Impl.ZeroBytes
+        // to be not 0, and thats invalid for the crypto_secretbox_open() interface
+        // (it seems to work but the docs say they should not)
+        c[0..Impl.ZeroBytes] = 0;
 
-      if(crypto_secretbox_open(m2[0..msgBlockLen], currentC, n, k)) {
-        assert( m2[0..msgBlockLen] == m[0..msgBlockLen], "foregery" );
-      } else {
-        ++caught;
+        if(Impl.secretboxOpen(m2[0..msgBlockLen], currentC, n, k)) {
+          assert( m2[0..msgBlockLen] == m[0..msgBlockLen], "foregery" );
+        } else {
+          ++caught;
+        }
       }
     }
   }
+
+  testSecretbox!XSalsa20Poly1305();
 }
 

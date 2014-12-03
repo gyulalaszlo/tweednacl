@@ -45,13 +45,12 @@
 
 
   */
-module nacl.box;
+module nacl.curve25519xsalsa20poly1305;
 
-import nacl.constants;
 import nacl.scalarmult;
 import nacl.basics : _0, safeRandomBytes, sigma;
 import nacl.core;
-import nacl.secretbox;
+import nacl.xsalsa20poly1305;
 
 
 struct Curve25519XSalsa20Poly1305 {
@@ -75,13 +74,13 @@ struct Curve25519XSalsa20Poly1305 {
   /** The number of 0 bytes in front of the encrypted box. */
   enum BoxZeroBytes = 16;
 
-  alias Nonce = ubyte[NonceBytes];
-  alias Beforenm = ubyte[BeforeNmBytes];
   alias PublicKey = ubyte[PublicKeyBytes];
   alias SecretKey = ubyte[SecretKeyBytes];
+  alias Nonce = ubyte[NonceBytes];
+  alias Beforenm = ubyte[BeforeNmBytes];
 }
 
-
+private alias CXSP = Curve25519XSalsa20Poly1305;
 
 /**
 
@@ -95,8 +94,9 @@ Params:
   pk = the output for the public key
   sk = the output for the secret key
   */
-int crypto_box_keypair(alias safeRnd)(ref ubyte[crypto_box_PUBLICKEYBYTES] pk,
-    ref ubyte[crypto_box_SECRETKEYBYTES] sk)
+int crypto_box_keypair(alias safeRnd)(
+    ref CXSP.PublicKey pk,
+    ref CXSP.SecretKey sk)
 {
   safeRnd(sk,32);
   return crypto_scalarmult_base(pk,sk);
@@ -120,13 +120,13 @@ int crypto_box_keypair(alias safeRnd)(ref ubyte[crypto_box_PUBLICKEYBYTES] pk,
   including the bytes required to be 0.
   */
 pure nothrow @safe @nogc bool crypto_box(ubyte[] cypherText,const ubyte[] m,
-    ref const ubyte[crypto_box_NONCEBYTES] nonce,
-    ref const ubyte[crypto_box_PUBLICKEYBYTES] recvPk,
-    ref const ubyte[crypto_box_SECRETKEYBYTES] senderSk)
+    ref const CXSP.Nonce nonce,
+    ref const CXSP.PublicKey recvPk,
+    ref const CXSP.SecretKey senderSk)
 in {
-  assert( m.length >= crypto_box_ZEROBYTES );
+  assert( m.length >= CXSP.ZeroBytes );
   assert( cypherText.length >= m.length );
-  foreach(i;0..crypto_box_ZEROBYTES) assert( m[i] == 0 );
+  foreach(i;0..CXSP.ZeroBytes) assert( m[i] == 0 );
 }
 body {
   ubyte k[32];
@@ -153,13 +153,13 @@ body {
 
   */
 pure nothrow @safe @nogc bool crypto_box_open(ubyte[] m,const ubyte[] cypherText,
-    ref const ubyte[crypto_box_NONCEBYTES] nonce,
-    ref const ubyte[crypto_box_PUBLICKEYBYTES] senderPk,
-    ref const ubyte[crypto_box_SECRETKEYBYTES] recvSk)
+    ref const CXSP.Nonce nonce,
+    ref const CXSP.PublicKey senderPk,
+    ref const CXSP.SecretKey recvSk)
 in {
-  assert( cypherText.length >= crypto_box_BOXZEROBYTES);
+  assert( cypherText.length >= CXSP.BoxZeroBytes);
   assert( m.length >= cypherText.length );
-  foreach(i;0..crypto_box_BOXZEROBYTES)
+  foreach(i;0..CXSP.BoxZeroBytes)
     assert( cypherText[i] == 0 );
 }
 body {
@@ -181,9 +181,9 @@ body {
   crypto_box_afternm and crypto_box_open_afternm, and can be reused for any
   number of messages.
   */
-pure nothrow @safe @nogc int crypto_box_beforenm( ref ubyte[crypto_box_BEFORENMBYTES] k,
-    ref const ubyte[crypto_box_PUBLICKEYBYTES] pk,
-    const ubyte[crypto_box_SECRETKEYBYTES] sk)
+pure nothrow @safe @nogc int crypto_box_beforenm( ref CXSP.Beforenm k,
+    ref const CXSP.PublicKey pk,
+    ref const CXSP.SecretKey sk)
 {
   ubyte s[32];
   crypto_scalarmult(s,sk,pk);
@@ -192,12 +192,12 @@ pure nothrow @safe @nogc int crypto_box_beforenm( ref ubyte[crypto_box_BEFORENMB
 
 /** ditto */
 pure nothrow @safe @nogc bool crypto_box_afternm(ubyte[] cypherText, const ubyte[] m,
-    ref const ubyte[crypto_box_NONCEBYTES] nonce,
-    ref const ubyte[crypto_box_BEFORENMBYTES] k)
+    ref const CXSP.Nonce nonce,
+    ref const CXSP.Beforenm k)
 in {
-  assert( m.length >= crypto_box_ZEROBYTES );
+  assert( m.length >= CXSP.ZeroBytes );
   assert( cypherText.length >= m.length );
-  foreach(i;0..crypto_box_ZEROBYTES) assert( m[i] == 0 );
+  foreach(i;0..CXSP.ZeroBytes) assert( m[i] == 0 );
 }
 body {
   return crypto_secretbox(cypherText,m,nonce,k);
@@ -205,12 +205,11 @@ body {
 
 /** ditto */
 pure nothrow @safe @nogc bool crypto_box_open_afternm(ubyte[] m, const ubyte[] cypherText,
-    ref const ubyte[crypto_box_NONCEBYTES] nonce,
-    ref const ubyte[crypto_box_BEFORENMBYTES] k)
+    ref const CXSP.Nonce nonce,
+    ref const CXSP.Beforenm k)
 in {
-  foreach(i;0..crypto_box_BOXZEROBYTES)
-    assert( cypherText[i] == 0,
-        "The first crypto_box_BOXZEROBYTES bytes of the ciphertext c must be all 0." );
+  foreach(i;0..CXSP.BoxZeroBytes)
+    assert( cypherText[i] == 0 );
 }
 body {
   return crypto_secretbox_open(m,cypherText,nonce,k);
@@ -279,7 +278,7 @@ unittest {
       ,0xe3,0x55,0xa5
     ];
 
-  ubyte k[crypto_box_BEFORENMBYTES];
+  CXSP.Beforenm k;
   crypto_box(c, m, nonce, bobpk, alicesk);
   assert( c[16..163] == cert );
   c[] = 0;
@@ -343,7 +342,7 @@ unittest {
     ,0x5e,0x07,0x05
     ];
   ubyte m[163];
-  ubyte k[crypto_box_BEFORENMBYTES];
+  CXSP.Beforenm k;
   assert(crypto_box_open(m, c, nonce, alicepk, bobsk));
   assert( m[32..163] == cert);
   m[] = 0;
@@ -356,33 +355,38 @@ unittest
 {
   import std.random;
 
-  ubyte alicesk[crypto_box_SECRETKEYBYTES];
-  ubyte alicepk[crypto_box_PUBLICKEYBYTES];
-  ubyte bobsk[crypto_box_SECRETKEYBYTES];
-  ubyte bobpk[crypto_box_PUBLICKEYBYTES];
-  ubyte n[crypto_box_NONCEBYTES];
+  CXSP.SecretKey alicesk;
+  //ubyte[crypto_box_SECRETKEYBYTES] alicesk;
+  CXSP.PublicKey alicepk;
+  //ubyte[crypto_box_PUBLICKEYBYTES] alicepk;
+  CXSP.SecretKey bobsk;
+  //ubyte[crypto_box_SECRETKEYBYTES] bobsk;
+  CXSP.PublicKey bobpk;
+  //ubyte[crypto_box_PUBLICKEYBYTES] bobpk;
+  CXSP.Nonce n;
+  //ubyte[crypto_box_NONCEBYTES] n;
   ubyte m[32000];
   ubyte c[32000];
   ubyte m2[32000];
 
   size_t mlen;
   // This test is reallly slow when incrementing 1-by-1
-  for (mlen = 0; mlen < (2 << 16) && mlen + crypto_box_ZEROBYTES < m.length;
+  for (mlen = 0; mlen < (2 << 16) && mlen + CXSP.ZeroBytes < m.length;
       mlen = (mlen << 1) + 1 )
   {
-    immutable msgBlockLen = mlen + crypto_box_ZEROBYTES;
+    immutable msgBlockLen = mlen + CXSP.ZeroBytes;
 
     crypto_box_keypair!safeRandomBytes(alicepk, alicesk);
     crypto_box_keypair!safeRandomBytes(bobpk, bobsk);
     foreach(ref e;n) n = uniform(ubyte.min, ubyte.max);
-    foreach(ref e;m[crypto_box_ZEROBYTES..msgBlockLen]) e = uniform(ubyte.min, ubyte.max);
+    foreach(ref e;m[CXSP.ZeroBytes..msgBlockLen]) e = uniform(ubyte.min, ubyte.max);
     crypto_box(c[0..msgBlockLen], m[0..msgBlockLen], n, bobpk, alicesk);
     assert( crypto_box_open(m2, c[0..msgBlockLen], n, alicepk, bobsk), "ciphertext fails verification");
     assert( m2[0..msgBlockLen] == m[0..msgBlockLen] );
 
     foreach(i;0..10) {
       c[uniform(0, msgBlockLen)] = uniform(ubyte.min,ubyte.max);
-      c[0..crypto_box_ZEROBYTES] = 0;
+      c[0..CXSP.ZeroBytes] = 0;
       if (crypto_box_open(m2, c[0..msgBlockLen], n, alicepk, bobsk))
         assert( m2[0..msgBlockLen] == m[0..msgBlockLen], "forgery" );
     }

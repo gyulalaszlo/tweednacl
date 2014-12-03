@@ -133,10 +133,10 @@ module nacl;
 
 import nacl.encoded_bytes;
 
-import nacl.box : Curve25519XSalsa20Poly1305;
-import nacl.sign : Ed25519;
-import nacl.secretbox : XSalsa20Poly1305;
-import nacl.onetimeauth : Poly1305;
+import nacl.curve25519xsalsa20poly1305 : Curve25519XSalsa20Poly1305;
+import nacl.ed25519 : Ed25519;
+import nacl.xsalsa20poly1305 : XSalsa20Poly1305;
+import nacl.poly1305 : Poly1305;
 
 unittest {
   // this import is here so RDMD -unittest runs without linker errors
@@ -552,12 +552,15 @@ unittest
 /**
   A secret-key authenticated encrypter.
   */
-struct SecretBoxer(Impl=XSalsa20Poly1305) {
+struct SecretBoxer(
+    Impl=XSalsa20Poly1305,
+    NonceGenerator=NonceStream!(Impl.NonceBytes, 1),
+    ) {
   enum ZeroBytes = Impl.ZeroBytes;
   enum BoxZeroBytes = Impl.BoxZeroBytes;
 
   Impl.Key key;
-  NonceStream!(Impl.NonceBytes, 1) nonces;
+  NonceGenerator nonces;
 
   this( ref Impl.Key k, ref Impl.Nonce startNonce ) {
     key = k;

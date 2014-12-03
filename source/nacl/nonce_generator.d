@@ -1,6 +1,5 @@
 module nacl.nonce_generator;
-
-import std.stdio;
+import nacl.sha512;
 
 /**
   Implments a simple nonce-generator.
@@ -119,22 +118,37 @@ unittest {
 
 }
 
-struct NonceStream(size_t byteCount, ubyte incrementAmt=1, ubyte mask=0) {
+/**
+  A single, always incrementing infinite range of nonces.
+Params:
+  byteCount = the number of bytes in the nonce
+  incrementAmt = the distance between two nonces
+  mask = when 
+  */
+template NonceStream(size_t byteCount, ubyte incrementAmt=1, ubyte mask=0) {
   alias Nonce = ubyte[byteCount];
   enum useOffset = (incrementAmt != 1);
 
-  Nonce bytes;
+  struct NonceStream {
+    Nonce bytes;
 
-  static if (useOffset) {
-    ubyte offset;
-  }
-
-  @property ref Nonce front() { return bytes; }
-
-  void popFront() {
-    increment( bytes, incrementAmt );
     static if (useOffset) {
-      bytes[0] = cast(ubyte)( (bytes[0] & mask) + offset );
+      /** The offset of this specific nonce range */
+      ubyte offset;
+    }
+
+    // this is an inifinite range
+    enum empty = false;
+
+    /** The current nonce. */
+    @property ref Nonce front() { return bytes; }
+
+    /** Get the next nonce for this counter */
+    void popFront() {
+      increment( bytes, incrementAmt );
+      static if (useOffset) {
+        bytes[0] = cast(ubyte)( (bytes[0] & mask) + offset );
+      }
     }
   }
 }
@@ -161,7 +175,6 @@ unittest {
   assert( n == [2,1,0,0] );
 }
 
-import nacl.hash : SHA512;
 /**
   Generates a nonce that is based on the current clock value.
 
@@ -176,7 +189,7 @@ import nacl.hash : SHA512;
 
   ---
   */
-auto generateNonce(size_t byteCount, alias Hash=nacl.hash.SHA512)()
+auto generateNonce(size_t byteCount, alias Hash=SHA512)()
   if (byteCount >= long.sizeof && (Hash.Bytes + long.sizeof) >= byteCount)
 {
   import std.datetime;
@@ -212,7 +225,7 @@ unittest {
 
 
 /** ditto */
-auto generateNonce(Impl, alias Hash=nacl.hash.SHA512)()
+auto generateNonce(Impl, alias Hash=SHA512)()
 {
   return generateNonce!(Impl.NonceBytes, Hash);
 }

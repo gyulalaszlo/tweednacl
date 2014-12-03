@@ -34,9 +34,24 @@
 module nacl.stream;
 
 import nacl.basics : sigma;
-import nacl.constants;
+//import nacl.constants;
 import nacl.core;
 
+struct XSalsa20 {
+
+  enum Primitive = "xsalsa20";
+  enum Implementation = "crypto_stream/xsalsa20/tweet";
+  enum Version = "-";
+
+  enum KeyBytes = 32;
+  enum NonceBytes = 24;
+
+  alias stream = crypto_stream;
+  alias streamXor = crypto_stream_xor;
+
+  alias Key = ubyte[KeyBytes];
+  alias Nonce = ubyte[NonceBytes];
+}
 /**
 
   The crypto_stream function produces a stream c[0], c[1], ..., c[clen-1] as a
@@ -87,8 +102,8 @@ pure nothrow @safe @nogc int crypto_stream_salsa20_xor_impl(bool useMessage=true
     ubyte[] c,
     const(ubyte)[] m,
     ulong b,
-    ref const(ubyte)[salsaRoundNonceBytes] n,
-    ref const(ubyte)[crypto_stream_KEYBYTES] k
+    ref const ubyte[salsaRoundNonceBytes] n,
+    ref const ubyte[crypto_stream_KEYBYTES] k
     )
 {
   import nacl.basics : sigma;
@@ -133,16 +148,16 @@ pure nothrow @safe @nogc int crypto_stream_salsa20_xor_impl(bool useMessage=true
 const(const(ubyte)[]) nullBytes = [];
 
 pure nothrow @safe @nogc int crypto_stream_salsa20(ubyte[] c,ulong d,
-    ref const(ubyte)[salsaRoundNonceBytes] n,
-    ref const(ubyte)[crypto_stream_KEYBYTES] k)
+    ref const ubyte[salsaRoundNonceBytes] n,
+    ref const ubyte[crypto_stream_KEYBYTES] k)
 {
   const ubyte[] nullBytes = [];
   return crypto_stream_salsa20_xor_impl!false(c,nullBytes,d,n,k);
 }
 
 pure nothrow @safe @nogc int crypto_stream_salsa20_xor(ubyte[] c, const(ubyte)[] m,ulong b,
-    ref const(ubyte)[salsaRoundNonceBytes] n,
-    ref const(ubyte)[crypto_stream_KEYBYTES] k)
+    ref const ubyte[salsaRoundNonceBytes] n,
+    ref const ubyte[crypto_stream_KEYBYTES] k)
 {
   return crypto_stream_salsa20_xor_impl!true(c,m,b,n,k);
 }
