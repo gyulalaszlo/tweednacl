@@ -118,6 +118,39 @@ unittest {
 
 }
 
+
+/**
+  Implments a single nonce-generator.
+
+  This simply enables for secret-key encryption primitives to have the same
+  nonce on both sides of a communication.
+ */
+struct SingleNonce(size_t nonceSize) {
+  alias Nonce = ubyte[nonceSize];
+
+  alias NonceS = NonceStream!(nonceSize, 1);
+
+  NonceS nonces;
+
+  /// The nonce I use to encrypt packages sent by me and the other party uses 
+  /// to encrypt packages sent to me.
+  @property ref Nonce myNonce() { return nonces.front; }
+  /// ditto
+  @property ref Nonce otherNonce() { return nonces.front; }
+
+  /** Initializes the nonce generator to 0  */
+  this( ref const Nonce startNonce )
+  {
+    nonces.bytes = startNonce;
+  }
+
+  /** Sets the next nonce for the next */
+  void nextMine() { nonces.popFront(); }
+
+  /** Sets the next nonce for the next */
+  void nextOther() { nonces.popFront(); }
+}
+
 /**
   A single, always incrementing infinite range of nonces.
 Params:

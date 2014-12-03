@@ -399,8 +399,6 @@ unittest
   // with a keypair.
   foreach(i;0..testMessageLengthsUpTo) {
     const mlen = (2 << i) + i;
-    import std.stdio;
-    writefln("%s", mlen);
     import nacl.basics : safeRandomBytes;
     auto msg = msgBuf[0..mlen];
     auto signedMsg = signedMsgBuf[0..mlen+Ed25519.Bytes];

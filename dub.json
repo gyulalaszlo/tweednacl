@@ -1,8 +1,10 @@
 {
-	"name": "tweetnacl",
-	"description": "A minimal D application.",
-	"copyright": "Copyright © 2014, t",
-	"authors": ["t"],
-	"dependencies": {
-	}
+  "name": "tweednacl",
+  "targetType": "library",
+  "description": "A crypto library for D.",
+  "copyright": "Copyright © 2014, Gyula László",
+  "authors": ["Gyula László"],
+  "targetPath": "lib",
+  "dependencies": {
+  }
 }

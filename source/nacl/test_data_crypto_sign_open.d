@@ -2,6 +2,11 @@ module nacl.test_data_crypto_sign_open;
 
 import nacl.constants;
 
+enum crypto_sign_BYTES = 64;
+enum crypto_sign_SEEDBYTES = 32;
+enum crypto_sign_PUBLICKEYBYTES = 32;
+enum crypto_sign_SECRETKEYBYTES = 64;
+
 struct TestData {
   const(ubyte)[crypto_sign_SEEDBYTES] sk;
   const(ubyte)[crypto_sign_PUBLICKEYBYTES] pk;

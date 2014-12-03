@@ -46,6 +46,14 @@ struct XSalsa20Poly1305 {
 
   alias Key = ubyte[KeyBytes];
   alias Nonce = ubyte[NonceBytes];
+
+  // Box interface
+  enum BeforenmBytes = KeyBytes;
+
+  alias afternm = crypto_secretbox;
+  alias openAfternm = crypto_secretbox_open;
+
+  alias Beforenm = ubyte[BeforenmBytes];
 }
 
 /**

@@ -137,6 +137,7 @@ import nacl.curve25519xsalsa20poly1305 : Curve25519XSalsa20Poly1305;
 import nacl.ed25519 : Ed25519;
 import nacl.xsalsa20poly1305 : XSalsa20Poly1305;
 import nacl.poly1305 : Poly1305;
+import nacl.nonce_generator;
 
 unittest {
   // this import is here so RDMD -unittest runs without linker errors
@@ -343,18 +344,16 @@ unittest {
 alias generateBoxKeypair(Impl=Curve25519XSalsa20Poly1305, alias safeRnd=nacl.basics.safeRandomBytes)
   = generateKeypair!(Impl, safeRnd);
 
-import nacl.nonce_generator : DoubleStriderNonce, NonceStream, generateNonce;
-import std.stdio;
 
 /**
-  A communication helper that can box and unbox messages to and form a single other party.
+  A communication helper that can box and unbox messages to and form another party.
 
-  the encrypted box looks like this:
-
+  It is up to the user to provide some kind of a handshake to exchange a starting
+  nonce. The suggested way is to use the generateNonce() function.
   */
 struct Boxer(
-    Impl=Curve25519XSalsa20Poly1305,
-    NonceGenerator=DoubleStriderNonce!(Impl.NonceBytes)
+    Impl,
+    NonceGenerator
     ) {
 
   enum ZeroBytes = Impl.ZeroBytes;
@@ -363,41 +362,6 @@ struct Boxer(
   NonceGenerator nonceGenerator;
 
   private Impl.Beforenm sharedSecret;
-
-  /**
-    Creates a new Boxer.
-
-    Note: The keys passed are only used for generating a shared secret, they
-    arent stored.
-
-    It is up to the user to provide some kind of a handshake to exchange a starting
-    nonce. The suggested way is to use the generateNonce() function.
-    */
-  this( ref const Impl.PublicKey myPk,
-      ref const Impl.PublicKey oPk,
-      ref const Impl.SecretKey mySk)
-  {
-    nonceGenerator = NonceGenerator( myPk, oPk );
-    initNm(oPk, mySk);
-  }
-
-  /// ditto
-  this( ref const Impl.PublicKey myPk,
-      ref const Impl.PublicKey oPk,
-      ref const Impl.SecretKey mySk,
-      ref const Impl.Nonce startNonce)
-  {
-    nonceGenerator = NonceGenerator( myPk, oPk, startNonce, startNonce );
-    initNm(oPk, mySk);
-  }
-
-  // Calculates the shared secret in the beforenm (only key-dependent) parts of the boxing.
-  private void initNm(
-      ref const Impl.PublicKey otherPartyPublicKey,
-      ref const Impl.SecretKey mySecretKey)
-  {
-    Impl.beforenm( sharedSecret, otherPartyPublicKey, mySecretKey );
-  }
 
   /**
     Packages a message from me to the other party.
@@ -483,44 +447,59 @@ struct Boxer(
 
 
 /**
-  Creates a new Boxer.
+  Creates a new Boxer for public-key authenticated encryption.
 
-  The parameter keys should of the lengths required by the used
-  implementation.
+  Note:
+  The keys are only used to derive a shared secret and the
+  nonce-offsets, they are not stored in the Boxer.
 
   Params:
-    myPublic = my public key (only used for initializing the nonce generator,
+    myPublic = my public key
                not stored)
     mySecret = my secret key
     otherPublic = the other sides public key
+    nonce = the starting nonce.
 
   Returns: a new Boxer
 
   */
-auto boxer(Impl=Curve25519XSalsa20Poly1305, MP, MS, OP)(
+auto boxer(Impl=Curve25519XSalsa20Poly1305, MP, MS, OP,Nonce)(
     ref const MP myPublic,
     ref const OP otherPublic,
     ref const MS mySecret,
-    )
-if ( is(MP == Impl.PublicKey) && is( MS == Impl.SecretKey)
-    && is( OP == Impl.PublicKey))
+    ref const Nonce nonce)
+if ( is(MP == Impl.PublicKey)
+    && is( MS == Impl.SecretKey)
+    && is( OP == Impl.PublicKey)
+    && is(Nonce == Impl.Nonce))
 {
-  return Boxer!Impl( myPublic, otherPublic, mySecret);
+  alias NonceGenerator=DoubleStriderNonce!(Impl.NonceBytes);
+  Impl.Beforenm sharedSecret;
+  Impl.beforenm( sharedSecret, otherPublic, mySecret );
+  return Boxer!(Impl, NonceGenerator)(
+      NonceGenerator( myPublic, otherPublic, nonce, nonce ),
+      sharedSecret,
+      );
 }
 
 
+/**
+  Encrypting, decrypting and validating messages
+  */
 unittest
 {
   import std.random;
-  import std.string;
   import nacl.basics : randomBuffer;
   auto aliceK = generateBoxKeypair();
   auto bobK = generateBoxKeypair();
 
-
+  // This nonce should be exchanged via some kind of a handshake
   auto nonceFromHandshake = generateNonce!(aliceK.Primitive)();
-  auto aliceBoxer = boxer(aliceK.publicKey, bobK.publicKey, aliceK.secretKey );
-  auto bobBoxer = boxer(bobK.publicKey, aliceK.publicKey, bobK.secretKey );
+
+  auto aliceBoxer = boxer(aliceK.publicKey, bobK.publicKey,
+      aliceK.secretKey, nonceFromHandshake );
+  auto bobBoxer = boxer(bobK.publicKey, aliceK.publicKey,
+      bobK.secretKey, nonceFromHandshake );
 
   foreach(mlen;0..1024) {
     const msg = randomBuffer(mlen);
@@ -537,10 +516,17 @@ unittest
     // Try forgery
     if (mlen == 0) continue;
     foreach(i;0..10) {
+      // Re-send the message, but dont increment our nonce, since
+      // this message may get lost so alice may need to resend it, and
+      // if alice increments her nonce without bob receiving that message,
+      // she will be unable to talk to bob.
       cypherText = aliceBoxer.box(msg, false);
       cypherText[uniform(0,mlen)]++;
       try {
         assert( bobBoxer.open(cypherText) == msg, "forgery" );
+        // at this point the cyphertext is the same as the original (so the
+        // message is also the original), so alice must acknowledges it by
+        // incrementing her nonce.
         aliceBoxer.ack();
       }
       catch (BadSignatureError) { }
@@ -548,95 +534,21 @@ unittest
   }
 }
 
-
 /**
-  A secret-key authenticated encrypter.
+  Creates a new Boxer for a secret-key authenticated encryption.
+
+  Params:
+    k = the shared secret key
+    nonce = the starting nonce.
+
   */
-struct SecretBoxer(
-    Impl=XSalsa20Poly1305,
-    NonceGenerator=NonceStream!(Impl.NonceBytes, 1),
-    ) {
-  enum ZeroBytes = Impl.ZeroBytes;
-  enum BoxZeroBytes = Impl.BoxZeroBytes;
-
-  Impl.Key key;
-  NonceGenerator nonces;
-
-  this( ref Impl.Key k, ref Impl.Nonce startNonce ) {
-    key = k;
-    nonces.bytes = startNonce;
-  }
-
-
-  /**
-    Packages the plainText into an authenticated and encrypted box.
-
-    Params:
-    autoAck   = automatically increment my nonce after encoding this message.
-                This means that I am sure, that the receiver will get this message
-                or otherwise the nonces will be out of sync and the any messages
-                coming from me will be considered invalid.
-                If you dont want this behaviour, use the ack() function after
-                confirmation from the other party that the message was received.
-
-    */
-  ubyte[] box( const ubyte[] plainText, bool autoAck = true )
-  {
-    ubyte[] m,c;
-    immutable mlen = plainText.length + ZeroBytes;
-    m.length = mlen;
-    c.length = mlen;
-    m[ZeroBytes..mlen] = plainText;
-    Impl.secretbox( c, m, nonces.front, key );
-
-    if (autoAck) nonces.popFront();
-
-    return c[BoxZeroBytes..mlen];
-  }
-
-
-  /**
-    Acknowkledges the reception of the last message sent by this boxer.
-
-    This means incrementing the nonce, so any message sent to another boxer
-    who hasnt received the last message will be invalid.
-    */
-  void ack()
-  {
-    nonces.popFront();
-  }
-
-  /**
-    Opens a box encrypted and signed by another boxer with
-    the same key and the same nonce.
-    */
-  ubyte[] open( const ubyte[] cypherText )
-  in {
-    assert(cypherText.length >= (ZeroBytes - BoxZeroBytes));
-  }
-  body {
-    ubyte[] m,c;
-    immutable mlen = cypherText.length + BoxZeroBytes;
-    m.length = mlen;
-    c.length = mlen;
-    c[BoxZeroBytes..mlen] = cypherText;
-    if (!Impl.secretboxOpen( m, c, nonces.front, key ))
-      throw new BadSignatureError();
-
-    nonces.popFront();
-
-    return m[ZeroBytes..mlen];
-  }
-
-
-}
-
-/**
-  Convinience function to create a new SecretBoxer
-  */
-auto secretBoxer(Impl=XSalsa20Poly1305, Args...)( Args args )
+auto secretBoxer(Impl=XSalsa20Poly1305, Key, Nonce)(
+    ref const Key k,
+    ref const Nonce n)
+  if (is(Key == Impl.Key) && is(Nonce == Impl.Nonce))
 {
-  return SecretBoxer!(Impl)(args);
+  alias NonceGenerator=SingleNonce!(Impl.NonceBytes);
+  return Boxer!(Impl, NonceGenerator)( NonceGenerator(n), k);
 }
 
 unittest {
