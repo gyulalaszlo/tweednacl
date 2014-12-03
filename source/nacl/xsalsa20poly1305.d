@@ -27,7 +27,7 @@
 module nacl.xsalsa20poly1305;
 
 import nacl.poly1305 : Poly1305;
-import nacl.stream;
+import nacl.xsalsa20 : XSalsa20;
 
 struct XSalsa20Poly1305 {
   enum Primitive = "xsalsa20poly1305";
@@ -92,7 +92,7 @@ bool crypto_secretbox(
 {
   immutable d = m.length;
   if (d < XSalsa20Poly1305.ZeroBytes) return false;
-  crypto_stream_xor(c,m,d,n,k);
+  XSalsa20.streamXor(c,m,d,n,k);
   Poly1305.onetimeauth(c[16..32],c[32..$],c[0..32]);
   foreach(i;0..XSalsa20Poly1305.BoxZeroBytes) c[i] = 0;
   return true;
@@ -144,9 +144,9 @@ body {
   immutable d = c.length;
   if (d < XSalsa20Poly1305.ZeroBytes) return false;
   ubyte x[32];
-  crypto_stream(x,32,n,k);
+  XSalsa20.stream(x,32,n,k);
   if (!Poly1305.onetimeauthVerify(c[16..32], c[32..d],x)) return false;
-  crypto_stream_xor(m,c,d,n,k);
+  XSalsa20.streamXor(m,c,d,n,k);
   foreach(i;0..XSalsa20Poly1305.ZeroBytes) m[i] = 0;
   return true;
 }

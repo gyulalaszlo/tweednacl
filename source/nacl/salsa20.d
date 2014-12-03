@@ -1,25 +1,60 @@
-module nacl.core;
+module nacl.salsa20;
 
-import nacl.constants;
-import nacl.basics;
+import nacl.basics : ld32, L32, st32;
 
-public:
+struct Salsa20 {
+
+  enum Primitive = "salsa20";
+  enum Implementation = "crypto_core/salsa20/tweet";
+  enum Version = "-";
+
+  enum OutputBytes = 64;
+  enum InputBytes = 16;
+  enum KeyBytes = 32;
+  enum ConstBytes = 16;
+
+  alias core = crypto_core_salsa20;
+
+  alias Output = ubyte[OutputBytes];
+  alias Input = ubyte[InputBytes];
+  alias Key = ubyte[KeyBytes];
+  alias Const = ubyte[ConstBytes];
+}
+
+struct HSalsa20 {
+
+  enum Primitive = "hsalsa20";
+  enum Implementation = "crypto_core/hsalsa20/tweet";
+  enum Version = "-";
+
+  enum OutputBytes = 32;
+  enum InputBytes = 16;
+  enum KeyBytes = 32;
+  enum ConstBytes = 16;
+
+  alias core = crypto_core_hsalsa20;
+
+  alias Output = ubyte[OutputBytes];
+  alias Input = ubyte[InputBytes];
+  alias Key = ubyte[KeyBytes];
+  alias Const = ubyte[ConstBytes];
+}
 
 pure nothrow @safe @nogc int crypto_core_salsa20(
-    ref ubyte[crypto_core_salsa20_OUTPUTBYTES] output,
-    ref const ubyte[crypto_core_salsa20_INPUTBYTES] input,
-    ref const ubyte[crypto_core_salsa20_KEYBYTES] k,
-    ref const ubyte[crypto_core_salsa20_CONSTBYTES] c)
+    ref Salsa20.Output output,
+    ref const Salsa20.Input input,
+    ref const Salsa20.Key k,
+    ref const Salsa20.Const c)
 {
   core!(UseHSalsa.No)(output,input,k,c);
   return 0;
 }
 
 pure nothrow @safe @nogc int crypto_core_hsalsa20(
-    ref ubyte[crypto_core_hsalsa20_OUTPUTBYTES] output,
-    ref const ubyte[crypto_core_hsalsa20_INPUTBYTES] input,
-    ref const ubyte[crypto_core_hsalsa20_KEYBYTES] k,
-    ref const ubyte[crypto_core_hsalsa20_CONSTBYTES] c)
+    ref HSalsa20.Output output,
+    ref const HSalsa20.Input input,
+    ref const HSalsa20.Key k,
+    ref const HSalsa20.Const c)
 {
   core!(UseHSalsa.Yes)(output,input,k,c);
   return 0;

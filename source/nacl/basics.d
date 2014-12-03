@@ -4,15 +4,6 @@ public:
 
 
 /**
-  A cryptograhically secure random source.
-
-  Default versions are implemented in separate modules.
-
-  extern (D) void safeRandomBytes( ubyte[] output, size_t count);
-
-  */
-
-/**
   The crypto_verify_16 function returns 0 if x[0], x[1], ..., x[15] are the
   same as y[0], y[1], ..., y[15]. Otherwise it returns -1.
 

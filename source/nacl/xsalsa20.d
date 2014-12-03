@@ -31,11 +31,10 @@
   standard notion of unpredictability.
 
 */
-module nacl.stream;
+module nacl.xsalsa20;
 
 import nacl.basics : sigma;
-//import nacl.constants;
-import nacl.core;
+import nacl.salsa20 : Salsa20, HSalsa20;
 
 struct XSalsa20 {
 
@@ -55,25 +54,25 @@ struct XSalsa20 {
 /**
 
   The crypto_stream function produces a stream c[0], c[1], ..., c[clen-1] as a
-  function of a secret key k[0], k[1], ..., k[crypto_stream_KEYBYTES-1] and a
-  nonce n[0], n[1], ..., n[crypto_stream_NONCEBYTES-1]. The crypto_stream
+  function of a secret key k[0], k[1], ..., k[XSalsa20.KeyBytes-1] and a
+  nonce n[0], n[1], ..., n[XSalsa20.NonceBytes-1]. The crypto_stream
   function then returns 0.
 
 */
 pure nothrow @safe @nogc int crypto_stream(ubyte[] c,ulong d,
-    ref const ubyte[crypto_stream_NONCEBYTES] nonce,
-    ref const ubyte[crypto_stream_KEYBYTES] k)
+    ref const XSalsa20.Nonce nonce,
+    ref const XSalsa20.Key k)
 {
   ubyte s[32];
-  crypto_core_hsalsa20(s,nonce[0..crypto_core_hsalsa20_INPUTBYTES],k,sigma);
-  return crypto_stream_salsa20(c,d,nonce[crypto_core_hsalsa20_INPUTBYTES..$],s);
+  HSalsa20.core(s,nonce[0..HSalsa20.InputBytes],k,sigma);
+  return crypto_stream_salsa20(c,d,nonce[HSalsa20.InputBytes..$],s);
 }
 
 /**
 
   The crypto_stream_xor function encrypts a message m[0], m[1], ..., m[mlen-1]
-  using a secret key k[0], k[1], ..., k[crypto_stream_KEYBYTES-1] and a nonce
-  n[0], n[1], ..., n[crypto_stream_NONCEBYTES-1]. The crypto_stream_xor function
+  using a secret key k[0], k[1], ..., k[XSalsa20.KeyBytes-1] and a nonce
+  n[0], n[1], ..., n[XSalsa20.NonceBytes-1]. The crypto_stream_xor function
   puts the ciphertext into c[0], c[1], ..., c[mlen-1]. It then returns 0.
 
   The crypto_stream_xor function guarantees that the ciphertext is the plaintext
@@ -82,13 +81,13 @@ pure nothrow @safe @nogc int crypto_stream(ubyte[] c,ulong d,
 
 */
 pure nothrow @safe @nogc int crypto_stream_xor(ubyte[] c,const(ubyte)[] m,ulong d,
-    ref const ubyte[crypto_stream_NONCEBYTES] nonce,
-    ref const ubyte[crypto_stream_KEYBYTES] k)
+    ref const XSalsa20.Nonce nonce,
+    ref const XSalsa20.Key k)
 {
   import nacl.basics : sigma;
   ubyte s[32];
-  crypto_core_hsalsa20(s,nonce[0..crypto_core_hsalsa20_INPUTBYTES],k,sigma);
-  return crypto_stream_salsa20_xor(c,m,d,nonce[crypto_core_hsalsa20_INPUTBYTES..$],s);
+  HSalsa20.core(s,nonce[0..HSalsa20.InputBytes],k,sigma);
+  return crypto_stream_salsa20_xor(c,m,d,nonce[HSalsa20.InputBytes..$],s);
 }
 
 
@@ -103,7 +102,7 @@ pure nothrow @safe @nogc int crypto_stream_salsa20_xor_impl(bool useMessage=true
     const(ubyte)[] m,
     ulong b,
     ref const ubyte[salsaRoundNonceBytes] n,
-    ref const ubyte[crypto_stream_KEYBYTES] k
+    ref const XSalsa20.Key k
     )
 {
   import nacl.basics : sigma;
@@ -114,7 +113,7 @@ pure nothrow @safe @nogc int crypto_stream_salsa20_xor_impl(bool useMessage=true
   foreach(i;0..16) z[i] = 0;
   foreach(i;0..8) z[i] = n[i];
   while (b >= 64) {
-    crypto_core_salsa20(x,z,k,sigma);
+    Salsa20.core(x,z,k,sigma);
     static if (useMessage)
       foreach(i;0..64) {
         c[i] = m[i] ^ x[i];
@@ -134,7 +133,7 @@ pure nothrow @safe @nogc int crypto_stream_salsa20_xor_impl(bool useMessage=true
       m = m[64..$];
   }
   if (b) {
-    crypto_core_salsa20(x,z,k,sigma);
+    Salsa20.core(x,z,k,sigma);
     static if (useMessage)
       foreach(i;0..b) {
         c[i] = m[i] ^ x[i];
@@ -149,7 +148,7 @@ const(const(ubyte)[]) nullBytes = [];
 
 pure nothrow @safe @nogc int crypto_stream_salsa20(ubyte[] c,ulong d,
     ref const ubyte[salsaRoundNonceBytes] n,
-    ref const ubyte[crypto_stream_KEYBYTES] k)
+    ref const XSalsa20.Key k)
 {
   const ubyte[] nullBytes = [];
   return crypto_stream_salsa20_xor_impl!false(c,nullBytes,d,n,k);
@@ -157,7 +156,7 @@ pure nothrow @safe @nogc int crypto_stream_salsa20(ubyte[] c,ulong d,
 
 pure nothrow @safe @nogc int crypto_stream_salsa20_xor(ubyte[] c, const(ubyte)[] m,ulong b,
     ref const ubyte[salsaRoundNonceBytes] n,
-    ref const ubyte[crypto_stream_KEYBYTES] k)
+    ref const XSalsa20.Key k)
 {
   return crypto_stream_salsa20_xor_impl!true(c,m,b,n,k);
 }

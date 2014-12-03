@@ -47,10 +47,9 @@
   */
 module nacl.curve25519xsalsa20poly1305;
 
-import nacl.scalarmult;
 import nacl.basics : _0, safeRandomBytes, sigma;
-import nacl.core;
-import nacl.xsalsa20poly1305;
+import nacl.curve25519 : Curve25519;
+import nacl.xsalsa20poly1305 : XSalsa20Poly1305;
 
 
 struct Curve25519XSalsa20Poly1305 {
@@ -99,7 +98,7 @@ int crypto_box_keypair(alias safeRnd)(
     ref CXSP.SecretKey sk)
 {
   safeRnd(sk,32);
-  return crypto_scalarmult_base(pk,sk);
+  return Curve25519.scalarmultBase(pk,sk);
 }
 
 
@@ -119,7 +118,9 @@ int crypto_box_keypair(alias safeRnd)(
   bytes of the message; note, however, that mlen counts all of the bytes,
   including the bytes required to be 0.
   */
-pure nothrow @safe @nogc bool crypto_box(ubyte[] cypherText,const ubyte[] m,
+pure nothrow @safe @nogc
+bool crypto_box(
+    ubyte[] cypherText,const ubyte[] m,
     ref const CXSP.Nonce nonce,
     ref const CXSP.PublicKey recvPk,
     ref const CXSP.SecretKey senderSk)
@@ -152,7 +153,9 @@ body {
   crypto_box_ZEROBYTES bytes of the plaintext m are all 0.
 
   */
-pure nothrow @safe @nogc bool crypto_box_open(ubyte[] m,const ubyte[] cypherText,
+pure nothrow @safe @nogc
+bool crypto_box_open(
+    ubyte[] m,const ubyte[] cypherText,
     ref const CXSP.Nonce nonce,
     ref const CXSP.PublicKey senderPk,
     ref const CXSP.SecretKey recvSk)
@@ -181,17 +184,22 @@ body {
   crypto_box_afternm and crypto_box_open_afternm, and can be reused for any
   number of messages.
   */
-pure nothrow @safe @nogc int crypto_box_beforenm( ref CXSP.Beforenm k,
+pure nothrow @safe @nogc
+int crypto_box_beforenm(
+    ref CXSP.Beforenm k,
     ref const CXSP.PublicKey pk,
     ref const CXSP.SecretKey sk)
 {
+  import nacl.salsa20;
   ubyte s[32];
-  crypto_scalarmult(s,sk,pk);
-  return crypto_core_hsalsa20(k,_0,s,sigma);
+  Curve25519.scalarmult(s,sk,pk);
+  return HSalsa20.core(k,_0,s,sigma);
 }
 
 /** ditto */
-pure nothrow @safe @nogc bool crypto_box_afternm(ubyte[] cypherText, const ubyte[] m,
+pure nothrow @safe @nogc
+bool crypto_box_afternm(
+    ubyte[] cypherText, const ubyte[] m,
     ref const CXSP.Nonce nonce,
     ref const CXSP.Beforenm k)
 in {
@@ -200,11 +208,13 @@ in {
   foreach(i;0..CXSP.ZeroBytes) assert( m[i] == 0 );
 }
 body {
-  return crypto_secretbox(cypherText,m,nonce,k);
+  return XSalsa20Poly1305.secretbox(cypherText,m,nonce,k);
 }
 
 /** ditto */
-pure nothrow @safe @nogc bool crypto_box_open_afternm(ubyte[] m, const ubyte[] cypherText,
+pure nothrow @safe @nogc
+bool crypto_box_open_afternm(
+    ubyte[] m, const ubyte[] cypherText,
     ref const CXSP.Nonce nonce,
     ref const CXSP.Beforenm k)
 in {
@@ -212,7 +222,7 @@ in {
     assert( cypherText[i] == 0 );
 }
 body {
-  return crypto_secretbox_open(m,cypherText,nonce,k);
+  return XSalsa20Poly1305.secretboxOpen(m,cypherText,nonce,k);
 }
 
 
@@ -356,15 +366,10 @@ unittest
   import std.random;
 
   CXSP.SecretKey alicesk;
-  //ubyte[crypto_box_SECRETKEYBYTES] alicesk;
   CXSP.PublicKey alicepk;
-  //ubyte[crypto_box_PUBLICKEYBYTES] alicepk;
   CXSP.SecretKey bobsk;
-  //ubyte[crypto_box_SECRETKEYBYTES] bobsk;
   CXSP.PublicKey bobpk;
-  //ubyte[crypto_box_PUBLICKEYBYTES] bobpk;
   CXSP.Nonce n;
-  //ubyte[crypto_box_NONCEBYTES] n;
   ubyte m[32000];
   ubyte c[32000];
   ubyte m2[32000];

@@ -27,21 +27,36 @@
   $(LINK http://cr.yp.to/papers.html#curve25519).
 
 */
-module nacl.scalarmult;
+module nacl.curve25519;
 
-import nacl.constants;
-import nacl.basics;
+import nacl.basics : _121665, _9;
 import nacl.math25519;
+
+struct Curve25519 {
+  enum Primitive = "curve25519";
+  enum Implementation = "crypto_scalarmult/curve25519/tweet";
+  enum Version = "-";
+
+  enum Bytes = 32;
+  enum ScalarBytes = 32;
+
+  alias scalarmult = crypto_scalarmult;
+  alias scalarmultBase = crypto_scalarmult_base;
+
+  alias Value = ubyte[Bytes];
+  alias Scalar = ubyte[ScalarBytes];
+}
+
 /**
-  This function multiplies a group element p[0], ..., p[crypto_scalarmult_BYTES-1]
-  by an integer n[0], ..., n[crypto_scalarmult_SCALARBYTES-1].
+  This function multiplies a group element p[0], ..., p[Curve25519.Bytes-1]
+  by an integer n[0], ..., n[Curve25519.ScalarBytes-1].
 
   It puts the resulting group element into
-  q[0], ..., q[crypto_scalarmult_BYTES-1] and returns 0.
+  q[0], ..., q[Curve25519.Bytes-1] and returns 0.
 */
-pure nothrow @safe @nogc int crypto_scalarmult(ref ubyte[crypto_scalarmult_BYTES] q,
-    ref const ubyte[crypto_scalarmult_SCALARBYTES] n,
-    ref const ubyte[crypto_scalarmult_BYTES] p)
+pure nothrow @safe @nogc int crypto_scalarmult(ref Curve25519.Value q,
+    ref const Curve25519.Scalar n,
+    ref const Curve25519.Value p)
 {
   ubyte z[32];
   long[80] x;
@@ -96,18 +111,18 @@ pure nothrow @safe @nogc int crypto_scalarmult(ref ubyte[crypto_scalarmult_BYTES
 /**
 
   This function computes the scalar product of a standard
-  group element and an integer n[0], ..., n[crypto_scalarmult_SCALARBYTES-1]. It
-  puts the resulting group element into q[0], ..., q[crypto_scalarmult_BYTES-1]
+  group element and an integer n[0], ..., n[Curve25519.ScalarBytes-1]. It
+  puts the resulting group element into q[0], ..., q[Curve25519.ValueBytes-1]
   and returns 0.
 
   */
-pure nothrow @safe @nogc int crypto_scalarmult_base(ref ubyte[crypto_scalarmult_BYTES] q,
-    ref const ubyte[crypto_scalarmult_SCALARBYTES] n)
+pure nothrow @safe @nogc int crypto_scalarmult_base(ref Curve25519.Value q,
+    ref const Curve25519.Scalar n)
 {
   return crypto_scalarmult(q,n,_9);
 }
 
-private:
+
 unittest {
   ubyte alicesk[32]
     = [ 0x77, 0x07, 0x6d, 0x0a, 0x73, 0x18, 0xa5, 0x7d, 0x3c, 0x16, 0xc1,
