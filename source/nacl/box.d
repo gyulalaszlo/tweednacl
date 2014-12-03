@@ -28,8 +28,8 @@
   can freely modify a boxed message, and therefore cannot convince third
   parties that this particular message came from the sender. The sender and
   receiver are nevertheless protected against forgeries by other parties. In
-  the terminology of 
-  $(LINK http://groups.google.com/group/sci.crypt/msg/ec5c18b23b11d82c), 
+  the terminology of
+  $(LINK http://groups.google.com/group/sci.crypt/msg/ec5c18b23b11d82c),
   crypto_box uses "public-key authenticators" rather than "public-key
   signatures."
 
@@ -45,13 +45,44 @@
 
 
   */
-module nacl.crypto_box;
+module nacl.box;
 
 import nacl.constants;
 import nacl.scalarmult;
 import nacl.basics : _0, safeRandomBytes, sigma;
 import nacl.core;
 import nacl.secretbox;
+
+
+struct Curve25519XSalsa20Poly1305 {
+  enum Primitive = "curve25519xsalsa20poly1305";
+  enum Implementation = "crypto_box/curve25519xsalsa20poly1305/tweet";
+  enum Version = "-";
+
+  alias keypair = crypto_box_keypair;
+  alias box = crypto_box;
+  alias boxOpen = crypto_box_open;
+  alias beforenm = crypto_box_beforenm;
+  alias afternm = crypto_box_afternm;
+  alias openAfternm = crypto_box_open_afternm;
+
+  enum PublicKeyBytes = 32;
+  enum SecretKeyBytes = 32;
+  enum BeforeNmBytes = 32;
+  enum NonceBytes = 24;
+  /** The number of 0 bytes in front of the plaintext */
+  enum ZeroBytes = 32;
+  /** The number of 0 bytes in front of the encrypted box. */
+  enum BoxZeroBytes = 16;
+
+  alias Nonce = ubyte[NonceBytes];
+  alias Beforenm = ubyte[BeforeNmBytes];
+  alias PublicKey = ubyte[PublicKeyBytes];
+  alias SecretKey = ubyte[SecretKeyBytes];
+}
+
+
+
 /**
 
   The crypto_box_keypair function randomly generates a secret key and a
@@ -59,11 +90,15 @@ import nacl.secretbox;
   sk[crypto_box_SECRETKEYBYTES-1] and puts the public key into pk[0], pk[1], ...,
   pk[crypto_box_PUBLICKEYBYTES-1]. It then returns 0.
 
+Params:
+  safeRnd = a cryptographically safe random number generator like safeRandomBytes(ubyte[], size_t n)
+  pk = the output for the public key
+  sk = the output for the secret key
   */
-int crypto_box_keypair(ref ubyte[crypto_box_PUBLICKEYBYTES] pk,
+int crypto_box_keypair(alias safeRnd)(ref ubyte[crypto_box_PUBLICKEYBYTES] pk,
     ref ubyte[crypto_box_SECRETKEYBYTES] sk)
 {
-  safeRandomBytes(sk,32);
+  safeRnd(sk,32);
   return crypto_scalarmult_base(pk,sk);
 }
 
@@ -337,8 +372,8 @@ unittest
   {
     immutable msgBlockLen = mlen + crypto_box_ZEROBYTES;
 
-    crypto_box_keypair(alicepk, alicesk);
-    crypto_box_keypair(bobpk, bobsk);
+    crypto_box_keypair!safeRandomBytes(alicepk, alicesk);
+    crypto_box_keypair!safeRandomBytes(bobpk, bobsk);
     foreach(ref e;n) n = uniform(ubyte.min, ubyte.max);
     foreach(ref e;m[crypto_box_ZEROBYTES..msgBlockLen]) e = uniform(ubyte.min, ubyte.max);
     crypto_box(c[0..msgBlockLen], m[0..msgBlockLen], n, bobpk, alicesk);

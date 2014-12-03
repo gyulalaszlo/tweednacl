@@ -18,10 +18,24 @@
   the standard notion of unforgeability after a single message.
 */
 module nacl.onetimeauth;
-import nacl.constants;
+
 import nacl.basics;
 
 
+struct Poly1305 {
+  enum Primitive = "poly1305";
+  enum Version = "-";
+  enum Implementation = "crypto_onetimeauth/poly1305/tweet";
+
+  enum Bytes = 16;
+  enum KeyBytes = 32;
+
+  alias onetimeauth = crypto_onetimeauth;
+  alias onetimeauthVerify = crypto_onetimeauth_verify;
+
+  alias Value = ubyte[Bytes];
+  alias Key = ubyte[KeyBytes];
+}
 /**
 
   The crypto_onetimeauth function authenticates a message m[0], m[1], ...,
@@ -29,9 +43,13 @@ import nacl.basics;
   puts the authenticator into a[0], a[1], ..., a[crypto_onetimeauth_BYTES-1]; and
   returns 0.
 */
-pure nothrow @safe @nogc int crypto_onetimeauth( ref ubyte[crypto_onetimeauth_BYTES] output,
+pure nothrow @safe @nogc
+int crypto_onetimeauth(
+    //ref ubyte[crypto_onetimeauth_BYTES] output,
+    ref Poly1305.Value output,
     const(ubyte)[] m,
-    ref const ubyte[crypto_onetimeauth_KEYBYTES] k)
+    //ref const ubyte[crypto_onetimeauth_KEYBYTES] k)
+    ref const Poly1305.Key k)
 {
   uint s,u;
   uint[17] x,r,h,c,g;
@@ -96,9 +114,11 @@ pure nothrow @safe @nogc int crypto_onetimeauth( ref ubyte[crypto_onetimeauth_BY
   crypto_onetimeauth_verify returns -1.
 
 */
-pure nothrow @safe @nogc bool crypto_onetimeauth_verify( ref const ubyte[crypto_onetimeauth_BYTES] h,
+pure nothrow @safe @nogc
+bool crypto_onetimeauth_verify(
+    ref const Poly1305.Value h, //ubyte[crypto_onetimeauth_BYTES] h,
     const ubyte[] m,
-    ref const ubyte[crypto_onetimeauth_KEYBYTES] k)
+    ref const Poly1305.Key k) //ubyte[crypto_onetimeauth_KEYBYTES] k)
 {
   ubyte x[16];
   crypto_onetimeauth(x,m,k);
@@ -151,8 +171,6 @@ unittest {
 
 
 unittest {
-
-  import std.stdio;
   import std.random;
   ubyte key[32];
   ubyte c[10000];
@@ -169,15 +187,9 @@ unittest {
     }
     if (clen > 0) {
       currentC[uniform(0u, clen)] += 1 + (uniform(0u, 255u));
-      if (crypto_onetimeauth_verify(a, currentC, key)) {
-        writefln("forgery %d", clen);
-        assert(false);
-      }
+      assert( !crypto_onetimeauth_verify(a, currentC, key), "forgery");
       a[uniform(0u, a.length)] += 1 + (uniform(0u,255u));
-      if (crypto_onetimeauth_verify(a, currentC, key)) {
-        writefln("forgery %d", clen);
-        assert(false);
-      }
+      assert( !crypto_onetimeauth_verify(a, currentC, key), "forgery");
     }
   }
 }

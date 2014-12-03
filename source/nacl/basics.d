@@ -128,6 +128,7 @@ pure nothrow @safe @nogc int vn(const ubyte[] x,const ubyte[] y,int n)
 
 
 version(unittest) {
+  import std.random;
   /**
   For unittests that try to forge sign/crypt/forge random messages
   up to a given length  testMessageLengthsUpTo  is the maximum message
@@ -148,8 +149,33 @@ version(unittest) {
     */
   void randomBuffer(T)( T[] m )
   {
-    import std.random;
     foreach(ref e;m) e = uniform(T.min, T.max);
+  }
+
+
+  void forgeBuffer(T)( T[] m, size_t count )
+  {
+    foreach(i;0..count)
+      m[uniform(0,m.length)] = uniform(T.min, T.max);
+  }
+
+  /** ditto */
+  T[S] randomBuffer(size_t S, T=ubyte)()
+  {
+    T[S] buffer;
+    randomBuffer(buffer);
+    //foreach(ref e;buffer) e = uniform(T.min, T.max);
+    return buffer;
+  }
+
+  /** ditto */
+  T[] randomBuffer(T=ubyte)(size_t s)
+  {
+    T[] buffer;
+    buffer.length = s;
+    randomBuffer(buffer);
+    //foreach(ref e;buffer) e = uniform(T.min, T.max);
+    return buffer;
   }
 
 }

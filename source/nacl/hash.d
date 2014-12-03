@@ -21,15 +21,48 @@
   levels of confidence. One can hope that NIST's SHA-3 competition will improve
   the situation.
 
+
+  Note:
+  This implementation of SHA-512 is ~4x slower then the std.digest.sha
+  implementation.
 */
 module nacl.hash;
 import nacl.constants;
+
+
+struct SHA512 {
+
+  enum Primitive = "sha512";
+  enum Implementation = "crypto_hashblocks/sha512/tweet";
+  enum Version = "-";
+
+  alias hash = crypto_hash;
+
+  enum Bytes = 64;
+
+  alias HashValue = ubyte[Bytes];
+}
+
+struct SHA512Hashblocks {
+
+  enum Primitive = "sha512";
+  enum Implementation = "crypto_hash/sha512/tweet";
+  enum Version = "-";
+
+  enum StateBytes = 64;
+  enum BlockBytes = 128;
+
+  alias hashblocks = crypto_hashblocks;
+
+  alias State = ubyte[StateBytes];
+  alias Block = ubyte[BlockBytes];
+}
 
 /**
   The crypto_hash function hashes a message m[0], m[1], ..., m[m.length-1]. It puts
   the hash into h[0], h[1], ..., h[crypto_hash_BYTES-1].
 */
-pure nothrow @safe @nogc void crypto_hash( ref ubyte[crypto_hash_BYTES] output,
+pure nothrow @safe @nogc void crypto_hash( ref SHA512.HashValue output,//ubyte[crypto_hash_BYTES] output,
     const(ubyte)[] m )
 {
   import nacl.basics : ts64;
@@ -59,7 +92,9 @@ pure nothrow @safe @nogc void crypto_hash( ref ubyte[crypto_hash_BYTES] output,
 
 /**
 */
-pure nothrow @safe @nogc size_t crypto_hashblocks(ref ubyte[crypto_hashblocks_STATEBYTES] x, const(ubyte)[] m)
+pure nothrow @safe @nogc size_t crypto_hashblocks(
+    ref SHA512Hashblocks.State x,
+    const(ubyte)[] m)
 {
   import nacl.basics : dl64, ts64;
   size_t n = m.length;
@@ -149,7 +184,7 @@ unittest {
   import nacl.basics : toBytes;
   auto x = "testing\n";
   auto x2 = "The Conscience of a Hacker is a small essay written January 8, 1986 by a computer security hacker who went by the handle of The Mentor, who belonged to the 2nd generation of Legion of Doom.";
-  ubyte[crypto_hash_BYTES] h;
+  SHA512.HashValue h;
 
   size_t i;
   crypto_hash(h, toBytes(x));
@@ -174,3 +209,46 @@ unittest {
       );
 }
 
+unittest {
+  import std.datetime;
+  import std.random;
+  import std.stdio;
+  import nacl.basics : randomBuffer;
+  import std.digest.sha : sha512Of;
+
+  ubyte[][] data;
+  SHA512.HashValue[] hashes;
+
+  enum Tests = 256;
+
+  foreach(i;0..Tests) {
+    auto m = randomBuffer( uniform(0, 4096) );
+    data ~= m;
+    hashes ~= sha512Of(m);
+  }
+
+  void stdDigest() {
+    foreach(i;0..Tests)
+      assert( hashes[i] == sha512Of(data[i]));
+  }
+
+  void naclSha() {
+    SHA512.HashValue v;
+    foreach(i;0..Tests) {
+      SHA512.hash( v, data[i] );
+      assert( hashes[i] == v);
+    }
+  }
+
+  // on my machine the output is:
+  // $ rdmd -main -unittest -release -inline -O source/nacl/hash.d                                                                                                       [2:56:27]
+  // std.digest.SHA-512 vs nacl.SHA-512 -> 0.298038
+  // nacl.SHA-512 vs std.digest.SHA-512 -> 3.64688
+  debug (NaClBenchmark) {
+    writefln( "std.digest.SHA-512 vs nacl.SHA-512 -> %s",
+        comparingBenchmark!( stdDigest, naclSha, 0x8 ).point() );
+
+    writefln( "nacl.SHA-512 vs std.digest.SHA-512 -> %s",
+        comparingBenchmark!( naclSha, stdDigest, 0x8 ).point() );
+  }
+}

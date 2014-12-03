@@ -5,12 +5,32 @@ import nacl.basics;
 import nacl.math25519;
 import nacl.hash;
 
+
+// Description primitive for Ed25519
+struct Ed25519 {
+  enum Primitive = "ed25519";
+  enum Implementation = "crypto_sign/ed25519/tweet";
+  enum Version = "-";
+
+  alias keypair = crypto_sign_keypair;
+  alias sign = crypto_sign;
+  alias signOpen = crypto_sign_open;
+
+  enum Bytes = 64;
+  enum SeedBytes = 32;
+  enum PublicKeyBytes = 32;
+  enum SecretKeyBytes = 64;
+
+  alias PublicKey = ubyte[PublicKeyBytes];
+  alias SecretKey = ubyte[SecretKeyBytes];
+}
+
+
 /**
   The crypto_sign_keypair function randomly generates a secret key and a
   corresponding public key. It puts the secret key into sk[0], sk[1], ...,
   sk[crypto_sign_SECRETKEYBYTES-1] and puts the public key into pk[0], pk[1],
   ..., pk[crypto_sign_PUBLICKEYBYTES-1]. It then returns true.
-    import nacl.basics : safeRandomBytes;
 
 Params:
   safeRnd = a cryptographically safe random number generator like safeRandomBytes(ubyte[], size_t n)
@@ -376,6 +396,7 @@ unittest
 
   ubyte[crypto_sign_PUBLICKEYBYTES] pk;
   ubyte[crypto_sign_SECRETKEYBYTES] sk;
+  assert(crypto_sign_keypair!safeRandomBytes(pk, sk) );
 
 
   ubyte[testMessageLengthsUpTo] msgBuf;
@@ -388,7 +409,6 @@ unittest
     import nacl.basics : safeRandomBytes;
     auto msg = msgBuf[0..mlen];
     auto signedMsg = signedMsgBuf[0..mlen+crypto_sign_BYTES];
-    assert(crypto_sign_keypair!safeRandomBytes(pk, sk) );
     randomBuffer(msg[0..mlen]);
 
     assert( crypto_sign( signedMsg, signedMsgLen, msg,  sk ));

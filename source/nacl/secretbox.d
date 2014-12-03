@@ -30,6 +30,22 @@ import nacl.constants;
 import nacl.onetimeauth;
 import nacl.stream;
 
+struct XSalsa20Poly1305 {
+  enum Primitive = "xsalsa20poly1305";
+  enum Implementation = "crypto_secretbox/xsalsa20poly1305/tweet";
+  enum Version = "-";
+
+  enum KeyBytes = 32;
+  enum NonceBytes = 24;
+  enum ZeroBytes = 32;
+  enum BoxZeroBytes = 16;
+
+  alias secretbox = crypto_secretbox;
+  alias secretboxOpen = crypto_secretbox_open;
+
+  alias Key = ubyte[KeyBytes];
+  alias Nonce = ubyte[NonceBytes];
+}
 
 /**
 
@@ -46,14 +62,30 @@ import nacl.stream;
   remaining bytes of the message; note, however, that mlen counts all of the
   bytes, including the bytes required to be 0.)
 
+  ---
+  | 0x00                     | 0x00                     | PlainText
+  +---+-----+----------------+---+-----+----------------+---+-----+--------------------+
+  | 0 | ... | BoxZeroBytes-1 | 0 | ... | BoxZeroBytes-1 | 0 | ... | PlainText.length-1 |
+  +---+-----+----------------+---+-----+----------------+---+-----+--------------------+
+  | 0                        | BoxZeroBytes             | ZeroBytes
+  ---
+
   Similarly, ciphertexts in the C NaCl API are 0-padded versions of messages in
   the C++ NaCl API. Specifically: The crypto_secretbox function ensures that the
   first crypto_secretbox_BOXZEROBYTES bytes of the ciphertext c are all 0.
 
+  ---
+  | 0x00                             | CypherText + Auth
+  +---+---+---+-----+----------------+---+---+---+-----+------------+
+  | 0 | 1 | 2 | ... | BoxZeroBytes-1 | 0 | 1 | 2 | ... | c.length-1 |
+  +---+---+---+-----+----------------+---+---+---+-----+------------+
+  | 0                                | BoxZeroBytes
+  ---
+
 */
 pure nothrow @safe @nogc bool crypto_secretbox(ubyte[] c,const ubyte[] m,
-    ref const ubyte[crypto_secretbox_NONCEBYTES] n,
-    ref const ubyte[crypto_secretbox_KEYBYTES] k)
+    ref const XSalsa20Poly1305.Nonce n, // const ubyte[crypto_secretbox_NONCEBYTES] n,
+    ref const XSalsa20Poly1305.Key k) //ref const ubyte[crypto_secretbox_KEYBYTES] k)
 {
   immutable d = m.length;
   if (d < 32) return false;
@@ -76,13 +108,32 @@ pure nothrow @safe @nogc bool crypto_secretbox(ubyte[] c,const ubyte[] m,
 
   The caller must ensure, before calling the crypto_secretbox_open function, that
   the first crypto_secretbox_BOXZEROBYTES bytes of the ciphertext c are all 0.
+
+  ---
+  | 0x00                             | CypherText + Auth
+  +---+---+---+-----+----------------+---+---+---+-----+------------+
+  | 0 | 1 | 2 | ... | BoxZeroBytes-1 | 0 | 1 | 2 | ... | c.length-1 |
+  +---+---+---+-----+----------------+---+---+---+-----+------------+
+  | 0                                | BoxZeroBytes
+  ---
+
   The crypto_secretbox_open function ensures (in case of success) that the first
   crypto_secretbox_ZEROBYTES bytes of the plaintext m are all 0.
 
+  ---
+  | 0x00                          | PlainText
+  +---+---+---+-----+-------------+---+---+---+-----+------------+
+  | 0 | 1 | 2 | ... | ZeroBytes-1 | 0 | 1 | 2 | ... | m.length-1 |
+  +---+---+---+-----+-------------+---+---+---+-----+------------+
+  | 0                             | ZeroBytes
+  ---
+
   */
 pure nothrow @safe @nogc bool crypto_secretbox_open(ubyte[] m, const ubyte[] c,
-    ref const ubyte[crypto_secretbox_NONCEBYTES] n,
-    ref const ubyte[crypto_secretbox_KEYBYTES] k)
+    ref const XSalsa20Poly1305.Nonce n, // const ubyte[crypto_secretbox_NONCEBYTES] n,
+    ref const XSalsa20Poly1305.Key k) //ref const ubyte[crypto_secretbox_KEYBYTES] k)
+    //ref const ubyte[crypto_secretbox_NONCEBYTES] n,
+    //ref const ubyte[crypto_secretbox_KEYBYTES] k)
 in {
   foreach(i;0..crypto_secretbox_BOXZEROBYTES) assert( c[i] == 0 );
 }
