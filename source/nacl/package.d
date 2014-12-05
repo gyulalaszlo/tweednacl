@@ -161,19 +161,6 @@ struct KeyPair(Impl) {
   SecretKey secretKey;
 }
 
-/**
-  Generate a pair of public and private keys for an implementation.
-
-Params:
-  Impl = The implementation to use (defaults to Ed25519)
- */
-auto generateKeypair(Impl, alias safeRnd=nacl.basics.safeRandomBytes)()
-{
-  auto o = KeyPair!Impl();
-  Impl.keypair!safeRnd( o.publicKey, o.secretKey );
-  return o;
-}
-
 
 /**
   Generates a keypair for the sign() and openSigned() functions.
@@ -197,13 +184,79 @@ alias generateSignKeypair(Impl=Ed25519, alias safeRnd=nacl.basics.safeRandomByte
 
 
 /**
-  Gets thrown when a signature mismatches during the opening
-  a signed message or box.
-  */
-class BadSignatureError : Exception
+  Signs a message using the given secret key
+
+Params:
+  Impl = The implementation to use. Defaults to Ed25519.
+
+  signedData =  the signed data with crypto_sign_BYTES of signature followed
+                by the plaintext message
+  pk         =  the public key to check the signature with
+
+Returns: The signed data with crypto_sign_BYTES of signature followed by the
+plaintext message
+
+  Throws: BadSignatureError if the signature does not match the message.
+
+Examples:
+---
 {
-  this() { super("Bad signature!"); }
+
+  auto keyPair = generateSignKeypair();
+  // SIGNING A FILE
+  // -----------------------
+
+  // An example function that signs a file with a secret key and writes the signed
+  // data (the signature and the plaintext) to the output file
+  void signFile(K)( string inputFileName, string signedFileName,
+      ref const K secretKey )
+  {
+    import std.file;
+    std.file.write( signedFileName, sign( read( inputFileName ), secretKey ) );
+  }
+
+  signFile("dub.json", "dub.json.signed", keyPair.secretKey );
+
+
+  // LOADING THE SIGNED FILE
+  // -----------------------
+
+  // some function that operates on the trusted data
+  void process( const ubyte[] data ) { /+ ... +/ }
+
+
+  // An example function that verifies a file signed by signFile()
+  void loadAndProcessSignedFile(K)( string signedFileName,
+      ref const K publicKey )
+  {
+    import std.file;
+    // If the opening fails signature verification, BadSignatureError is thrown
+    // and the process() isnt reached.
+    try {
+      process( openSigned( read(signedFileName), publicKey ) );
+    }
+    catch (BadSignatureError) {
+      // ...
+    }
+  }
+
+  loadAndProcessSignedFile( "dub.json.signed", keyPair.publicKey );
 }
+---
+  */
+ubyte[] sign(Impl=Ed25519, E, size_t keySize)(
+    const E[] message, ref const ubyte[keySize] sk )
+  if ( keySize == Impl.SecretKeyBytes )
+{
+  ulong smlen;
+  const msg = nacl.basics.toBytes( message );
+  ubyte[] o;
+  o.length = msg.length + Impl.Bytes;
+  Impl.sign( o, smlen, msg, sk  );
+  return o;
+}
+
+
 
 /**
   Opens a signed message
@@ -236,43 +289,14 @@ body {
   return output;
 }
 
-/**
-  Signs a message using the given secret key
-
-Params:
-  Impl = The implementation to use. Defaults to Ed25519.
-
-  signedData =  the signed data with crypto_sign_BYTES of signature followed
-                by the plaintext message
-  pk         =  the public key to check the signature with
-
-Returns: The signed data with crypto_sign_BYTES of signature followed by the
-plaintext message
-
-  Throws: BadSignatureError if the signature does not match the message.
-  */
-ubyte[] sign(Impl=Ed25519, E, size_t keySize)(
-    const E[] message, ref const ubyte[keySize] sk )
-  if ( keySize == Impl.SecretKeyBytes )
-{
-  ulong smlen;
-  const msg = nacl.basics.toBytes( message );
-  ubyte[] o;
-  o.length = msg.length + Impl.Bytes;
-  Impl.sign( o, smlen, msg, sk  );
-  return o;
-}
-
 
 unittest {
-  import std.stdio;
-  import std.exception;
   import std.random;
   import nacl.basics : randomBuffer;
 
   auto o = generateSignKeypair();
 
-  foreach(mlen;0..32) {
+  foreach(mlen;0..16) {
     ubyte[] msg;
     msg.length = mlen;
     randomBuffer( msg );
@@ -290,77 +314,85 @@ unittest {
 }
 
 
+
+
 /**
-  Signing and loading a file, and process it only if the signature is valid.
-  */
-unittest {
 
-  auto keyPair = generateSignKeypair();
-  // SIGNING A FILE
-  // -----------------------
+A communication helper that can box and unbox messages to and form another party.
 
-  // An example function that signs a file with a secret key and writes the signed
-  // data (the signature and the plaintext) to the output file
-  void signFile(K)( string inputFileName, string signedFileName,
-      ref const K secretKey )
-  {
-    import std.file;
-    std.file.write( signedFileName, sign( read( inputFileName ), secretKey ) );
+It is up to the user to provide some kind of a handshake to exchange a starting
+nonce. The suggested way is to use the generateNonce() function.
+
+Examples:
+---
+  // Alice and Bob both create a public-secret keypair.
+  auto aliceK = generateBoxKeypair();
+  auto bobK = generateBoxKeypair();
+
+  // they exchange their public keys, but keep their secret keys private
+  auto alicePublicKey = aliceK.publicKey;
+  auto bobPublicKey = bobK.publicKey;
+
+
+  // Alice and Bob agree in a nonce for the current session via some
+  // kind of handshake.
+  auto nonceFromHandshake = generateNonce!(aliceK.Primitive)();
+  auto aliceNonce = nonceFromHandshake;
+  auto bobNonce = nonceFromHandshake;
+
+  // Alice creates her boxer
+  auto aliceBoxer = boxer(alicePublicKey, bobPublicKey,
+      aliceK.secretKey, nonceFromHandshake );
+
+  // Bob creates his boxer
+  auto bobBoxer = boxer(bobPublicKey, alicePublicKey,
+      bobK.secretKey, nonceFromHandshake );
+
+  // Alice packages and signs her message and sends it to
+  // Bob.
+  auto aliceSends = aliceBoxer.box( "Hello!" );
+
+  // After Bob gets the message he opens it.
+  // If the message fails to authenticate, Bob gets a BadSignatureError
+  // signaling that the message has altered or isnt coming from Alice.
+  try {
+    auto bobReceives = bobBoxer.open( aliceSends );
+    // ...
+  }
+  catch( BadSignatureError ) {
+    // If there has been an error authenticating the message.
   }
 
-  signFile("dub.json", "dub.json.signed", keyPair.secretKey );
+---
 
+Examples:
+  If the channel transmitted on may be unreliable, the acknowledment that
+  a message is received may be necessary.
+---
 
-  // LOADING THE SIGNED FILE
-  // -----------------------
+  // Lets assume aliceBoxer from the previous example
 
-  // some function that operates on the trusted data
-  void process( const ubyte[] data ) { /* ... */ }
+  // As alice is sending her message, she signals that she will
+  // know when Bob gets the message, and if one of her messages
+  // gets lost she will be able to send Bob a message without
+  // performing another handshake
+  auto aliceSends = aliceBoxer.box( "Hello!", false );
 
-
-  // An example function that verifies a file signed by signFile()
-  void loadAndProcessSignedFile(K)( string signedFileName,
-      ref const K publicKey )
-  {
-    import std.file;
-    // If the opening fails signature verification, BadSignatureError is thrown
-    // and the process() isnt reached.
-    try {
-      process( openSigned( read(signedFileName), publicKey ) );
-    }
-    catch (BadSignatureError) {
-      // ...
-    }
+  // Alice calls $(D Boxer.ack()) when she knows her message
+  // has been delivered (like a TCP ACK).
+  void onMessageDelivered() {
+    aliceBoxer.ack();
   }
 
-  loadAndProcessSignedFile( "dub.json.signed", keyPair.publicKey );
-}
-
-
-
-/**
-  Generates a keypair for the sign() and openSigned() functions.
+---
   */
-alias generateBoxKeypair(Impl=Curve25519XSalsa20Poly1305, alias safeRnd=nacl.basics.safeRandomBytes)
-  = generateKeypair!(Impl, safeRnd);
-
-
-/**
-  A communication helper that can box and unbox messages to and form another party.
-
-  It is up to the user to provide some kind of a handshake to exchange a starting
-  nonce. The suggested way is to use the generateNonce() function.
-  */
-struct Boxer(
-    Impl,
-    NonceGenerator
-    ) {
+struct Boxer( Impl, NonceGenerator )
+{
 
   enum ZeroBytes = Impl.ZeroBytes;
   enum BoxZeroBytes = Impl.BoxZeroBytes;
 
-  NonceGenerator nonceGenerator;
-
+  private NonceGenerator nonceGenerator;
   private Impl.Beforenm sharedSecret;
 
   /**
@@ -446,21 +478,70 @@ struct Boxer(
 }
 
 
+version(unittest) {
+  enum TryToForgeMessagesUpTo = 512;
+
+  void testBoxers(A,B)(A aliceBoxer, B bobBoxer)
+  {
+    import nacl.basics : randomBuffer, forgeBuffer;
+    foreach(mlen;0..TryToForgeMessagesUpTo) {
+      const msg = randomBuffer(mlen);
+      auto cypherText = aliceBoxer.box(msg);
+      auto plainText = bobBoxer.open(cypherText);
+      assert( plainText == msg );
+
+      //Try a replay attack
+      auto cypherText2 = aliceBoxer.box(msg);
+      auto plainText2 = bobBoxer.open(cypherText2);
+      assert( cypherText2 != cypherText, "replayable message" );
+      assert( plainText2 == msg );
+
+      // Try forgery
+      if (mlen == 0) continue;
+      foreach(i;0..10) {
+        // Re-send the message, but dont increment our nonce, since
+        // this message may get lost so alice may need to resend it, and
+        // if alice increments her nonce without bob receiving that message,
+        // she will be unable to talk to bob.
+        cypherText = aliceBoxer.box(msg, false);
+        forgeBuffer( cypherText, i );
+        try {
+          assert( bobBoxer.open(cypherText) == msg, "forgery" );
+          // at this point the cyphertext is the same as the original (so the
+          // message is also the original), so alice must acknowledges it by
+          // incrementing her nonce.
+          aliceBoxer.ack();
+        }
+        catch (BadSignatureError) { }
+      }
+    }
+  }
+}
+
+/**
+  Generates a keypair for the sign() and openSigned() functions.
+  */
+alias generateBoxKeypair(
+    Impl=Curve25519XSalsa20Poly1305,
+    alias safeRnd=nacl.basics.safeRandomBytes)
+  = generateKeypair!(Impl, safeRnd);
+
+
 /**
   Creates a new Boxer for public-key authenticated encryption.
 
-  Note:
+Note:
   The keys are only used to derive a shared secret and the
   nonce-offsets, they are not stored in the Boxer.
 
-  Params:
-    myPublic = my public key
-               not stored)
-    mySecret = my secret key
-    otherPublic = the other sides public key
-    nonce = the starting nonce.
+Params:
+myPublic = my public key
+not stored)
+mySecret = my secret key
+otherPublic = the other sides public key
+nonce = the starting nonce.
 
-  Returns: a new Boxer
+Returns: a new Boxer
 
   */
 auto boxer(Impl=Curve25519XSalsa20Poly1305, MP, MS, OP,Nonce)(
@@ -483,13 +564,9 @@ if ( is(MP == Impl.PublicKey)
 }
 
 
-/**
-  Encrypting, decrypting and validating messages
-  */
+
 unittest
 {
-  import std.random;
-  import nacl.basics : randomBuffer;
   auto aliceK = generateBoxKeypair();
   auto bobK = generateBoxKeypair();
 
@@ -501,45 +578,31 @@ unittest
   auto bobBoxer = boxer(bobK.publicKey, aliceK.publicKey,
       bobK.secretKey, nonceFromHandshake );
 
-  foreach(mlen;0..1024) {
-    const msg = randomBuffer(mlen);
-    auto cypherText = aliceBoxer.box(msg);
-    auto plainText = bobBoxer.open(cypherText);
-    assert( plainText == msg );
-
-     //Try a replay attack
-    auto cypherText2 = aliceBoxer.box(msg);
-    auto plainText2 = bobBoxer.open(cypherText2);
-    assert( cypherText2 != cypherText, "replayable message" );
-    assert( plainText2 == msg );
-
-    // Try forgery
-    if (mlen == 0) continue;
-    foreach(i;0..10) {
-      // Re-send the message, but dont increment our nonce, since
-      // this message may get lost so alice may need to resend it, and
-      // if alice increments her nonce without bob receiving that message,
-      // she will be unable to talk to bob.
-      cypherText = aliceBoxer.box(msg, false);
-      cypherText[uniform(0,mlen)]++;
-      try {
-        assert( bobBoxer.open(cypherText) == msg, "forgery" );
-        // at this point the cyphertext is the same as the original (so the
-        // message is also the original), so alice must acknowledges it by
-        // incrementing her nonce.
-        aliceBoxer.ack();
-      }
-      catch (BadSignatureError) { }
-    }
-  }
+  testBoxers( aliceBoxer, bobBoxer);
 }
 
+
+
 /**
+  Shortcut that generates a secret key for the default implementation of SecretBoxes.
+  */
+alias generateSecretBoxKey(Impl=XSalsa20Poly1305, alias safeRnd=nacl.basics.safeRandomBytes) =
+  generateSecretKey!(Impl, safeRnd);
+
+/**
+  Shortcut to generate a nonce for the default implementation of SecretBoxes.
+  */
+alias generateSecretBoxNonce(Impl=XSalsa20Poly1305) = generateNonce!(Impl);
+
+/**
+
   Creates a new Boxer for a secret-key authenticated encryption.
 
-  Params:
-    k = the shared secret key
-    nonce = the starting nonce.
+Params:
+  k = the shared secret key
+  nonce = the starting nonce.
+
+Returns: A new secret-key boxer.
 
   */
 auto secretBoxer(Impl=XSalsa20Poly1305, Key, Nonce)(
@@ -552,39 +615,22 @@ auto secretBoxer(Impl=XSalsa20Poly1305, Key, Nonce)(
 }
 
 unittest {
-  import nacl.basics : randomBuffer, forgeBuffer;
-  import std.random;
-  import std.exception;
   alias Impl = XSalsa20Poly1305;
-  Impl.Key k;
-  Impl.Nonce n = generateNonce!XSalsa20Poly1305();
-  nacl.basics.safeRandomBytes(k, Impl.KeyBytes );
+  auto k = generateSecretBoxKey!Impl();
+  auto n = generateSecretBoxNonce!Impl();
 
-  auto alice = secretBoxer(k, n);
-  auto bob = secretBoxer(k, n);
-  foreach(mlen;0..1024) {
-    const msg = randomBuffer(mlen);
+  auto aliceBoxer = secretBoxer(k, n);
+  auto bobBoxer = secretBoxer(k, n);
 
-    auto cypherText = alice.box( msg );
-    assert( msg != cypherText );
-    auto plainText = bob.open( cypherText );
-    assert( plainText == msg );
-
-    if (mlen < 10) continue;
-    // forgery
-    foreach(i;0..10) {
-      cypherText = alice.box( msg, false );
-      forgeBuffer( cypherText, i );
-      try {
-        assert( bob.open(cypherText) == msg );
-        alice.ack();
-      }
-      catch (BadSignatureError) {
-      }
-    }
-  }
+  testBoxers( aliceBoxer, bobBoxer );
 }
 
+
+/**
+  Shortcut that generates a secret key for the default implementation of Secret-Key Authentication.
+  */
+alias generateAuthKey(Impl=Poly1305, alias safeRnd=nacl.basics.safeRandomBytes) =
+  generateSecretKey!(Impl, safeRnd);
 
 
 /**
@@ -640,8 +686,7 @@ unittest {
   import std.random;
   import std.exception;
   alias Impl = Poly1305;
-  Impl.Key k;
-  nacl.basics.safeRandomBytes(k, Impl.KeyBytes );
+  auto k = generateAuthKey();
 
   foreach(mlen;0..1024) {
     const msg = randomBuffer(mlen);
@@ -661,5 +706,37 @@ unittest {
       assertThrown!BadSignatureError( openAuth( authVal, tmp, k) );
     }
   }
+}
+
+/**
+  Gets thrown when a signature mismatches during the opening
+  a signed message or box.
+  */
+class BadSignatureError : Exception
+{
+  this() { super("Bad signature!"); }
+}
+
+/**
+  Generates a pair of public and private keys for an implementation.
+
+Params:
+  Impl = The implementation to use (defaults to Ed25519)
+ */
+auto generateKeypair(Impl, alias safeRnd=nacl.basics.safeRandomBytes)()
+{
+  auto o = KeyPair!Impl();
+  Impl.keypair!safeRnd( o.publicKey, o.secretKey );
+  return o;
+}
+
+/**
+  Generates a secret key.
+  */
+auto generateSecretKey(Impl, alias safeRnd=nacl.basics.safeRandomBytes)()
+{
+  Impl.Key k;
+  safeRnd( k, Impl.KeyBytes );
+  return k;
 }
 

@@ -361,40 +361,48 @@ unittest {
   assert( m[32..163] == cert);
 }
 
-unittest
-{
-  import std.random;
-
-  CXSP.SecretKey alicesk;
-  CXSP.PublicKey alicepk;
-  CXSP.SecretKey bobsk;
-  CXSP.PublicKey bobpk;
-  CXSP.Nonce n;
-  ubyte m[32000];
-  ubyte c[32000];
-  ubyte m2[32000];
-
-  size_t mlen;
-  // This test is reallly slow when incrementing 1-by-1
-  for (mlen = 0; mlen < (2 << 16) && mlen + CXSP.ZeroBytes < m.length;
-      mlen = (mlen << 1) + 1 )
+// This test doubles the runtime of the tests...
+version (TweedNaClLargeBufferTests) {
+  unittest
   {
-    immutable msgBlockLen = mlen + CXSP.ZeroBytes;
+    import std.random;
+
+    CXSP.SecretKey alicesk;
+    CXSP.PublicKey alicepk;
+    CXSP.SecretKey bobsk;
+    CXSP.PublicKey bobpk;
+    CXSP.Nonce n;
+    ubyte m[32000];
+    ubyte c[32000];
+    ubyte m2[32000];
 
     crypto_box_keypair!safeRandomBytes(alicepk, alicesk);
     crypto_box_keypair!safeRandomBytes(bobpk, bobsk);
-    foreach(ref e;n) n = uniform(ubyte.min, ubyte.max);
-    foreach(ref e;m[CXSP.ZeroBytes..msgBlockLen]) e = uniform(ubyte.min, ubyte.max);
-    crypto_box(c[0..msgBlockLen], m[0..msgBlockLen], n, bobpk, alicesk);
-    assert( crypto_box_open(m2, c[0..msgBlockLen], n, alicepk, bobsk), "ciphertext fails verification");
-    assert( m2[0..msgBlockLen] == m[0..msgBlockLen] );
 
-    foreach(i;0..10) {
-      c[uniform(0, msgBlockLen)] = uniform(ubyte.min,ubyte.max);
-      c[0..CXSP.ZeroBytes] = 0;
-      if (crypto_box_open(m2, c[0..msgBlockLen], n, alicepk, bobsk))
-        assert( m2[0..msgBlockLen] == m[0..msgBlockLen], "forgery" );
+    size_t mlen;
+    // This test is reallly slow when incrementing 1-by-1
+    for (mlen = 0; mlen < (2 << 16) && mlen + CXSP.ZeroBytes < m.length;
+        mlen = (mlen << 1) + 1 )
+    {
+      //import std.stdio;
+      //writefln("len: %s", mlen);
+      immutable msgBlockLen = mlen + CXSP.ZeroBytes;
+
+      foreach(ref e;n) n = uniform(ubyte.min, ubyte.max);
+      foreach(ref e;m[CXSP.ZeroBytes..msgBlockLen]) e = uniform(ubyte.min, ubyte.max);
+      crypto_box(c[0..msgBlockLen], m[0..msgBlockLen], n, bobpk, alicesk);
+      assert( crypto_box_open(m2, c[0..msgBlockLen], n, alicepk, bobsk), "ciphertext fails verification");
+      assert( m2[0..msgBlockLen] == m[0..msgBlockLen] );
+
+      foreach(i;0..10) {
+        c[uniform(0, msgBlockLen)] = uniform(ubyte.min,ubyte.max);
+        c[0..CXSP.ZeroBytes] = 0;
+        if (crypto_box_open(m2, c[0..msgBlockLen], n, alicepk, bobsk))
+          assert( m2[0..msgBlockLen] == m[0..msgBlockLen], "forgery" );
+      }
+      //writefln("done len: %s", mlen);
     }
   }
+
 }
 

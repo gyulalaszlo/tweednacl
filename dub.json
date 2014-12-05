@@ -3,8 +3,10 @@
   "targetType": "library",
   "description": "A crypto library for D.",
   "copyright": "Copyright © 2014, Gyula László",
+  "license": "BSL-1.0",
   "authors": ["Gyula László"],
   "targetPath": "lib",
+  "versions": ["TweedNaClLargeBufferTests"],
   "dependencies": {
   }
 }

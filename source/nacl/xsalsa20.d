@@ -176,20 +176,22 @@ unittest {
   assert( toHexString(sha256Of(output[])) == "662B9D0E3463029156069B12F918691A98F7DFB2CA0393C96BBFC6B1FBD630A2" );
 }
 
-
-unittest {
-  ubyte output[4194304];
-  ubyte h[32];
-  ubyte[8] nonce = [0x82, 0x19, 0xe0, 0x03, 0x6b, 0x7a, 0x0b, 0x37];
-  ubyte[32] key =
-    [ 0xdc, 0x90, 0x8d, 0xda, 0x0b, 0x93, 0x44, 0xa9, 0x53, 0x62, 0x9b,
+// This test doubles the runtime of the tests...
+version(TweedNaClLargeBufferTests) {
+  unittest {
+    ubyte output[4194304];
+    ubyte h[32];
+    ubyte[8] nonce = [0x82, 0x19, 0xe0, 0x03, 0x6b, 0x7a, 0x0b, 0x37];
+    ubyte[32] key =
+      [ 0xdc, 0x90, 0x8d, 0xda, 0x0b, 0x93, 0x44, 0xa9, 0x53, 0x62, 0x9b,
       0x73, 0x38, 0x20, 0x77, 0x88, 0x80, 0xf3, 0xce, 0xb4, 0x21, 0xbb,
       0x61, 0xb9, 0x1c, 0xbd, 0x4c, 0x3e, 0x66, 0x25, 0x6c, 0xe4];
 
-  crypto_stream_salsa20(output, 4194304, nonce, key);
+    crypto_stream_salsa20(output, 4194304, nonce, key);
 
-  import std.digest.sha;
-  assert( toHexString(sha256Of(output[])) == "662B9D0E3463029156069B12F918691A98F7DFB2CA0393C96BBFC6B1FBD630A2" );
+    import std.digest.sha;
+    assert( toHexString(sha256Of(output[])) == "662B9D0E3463029156069B12F918691A98F7DFB2CA0393C96BBFC6B1FBD630A2" );
+  }
 }
 
 
