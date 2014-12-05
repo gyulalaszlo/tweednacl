@@ -1,4 +1,4 @@
-module nacl.basics;
+module tweednacl.basics;
 
 public:
 

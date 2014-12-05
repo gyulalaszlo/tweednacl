@@ -31,10 +31,10 @@
   standard notion of unpredictability.
 
 */
-module nacl.xsalsa20;
+module tweednacl.xsalsa20;
 
-import nacl.basics : sigma;
-import nacl.salsa20 : Salsa20, HSalsa20;
+import tweednacl.basics : sigma;
+import tweednacl.salsa20 : Salsa20, HSalsa20;
 
 struct XSalsa20 {
 
@@ -84,7 +84,7 @@ pure nothrow @safe @nogc int crypto_stream_xor(ubyte[] c,const(ubyte)[] m,ulong 
     ref const XSalsa20.Nonce nonce,
     ref const XSalsa20.Key k)
 {
-  import nacl.basics : sigma;
+  import tweednacl.basics : sigma;
   ubyte s[32];
   HSalsa20.core(s,nonce[0..HSalsa20.InputBytes],k,sigma);
   return crypto_stream_salsa20_xor(c,m,d,nonce[HSalsa20.InputBytes..$],s);
@@ -105,7 +105,7 @@ pure nothrow @safe @nogc int crypto_stream_salsa20_xor_impl(bool useMessage=true
     ref const XSalsa20.Key k
     )
 {
-  import nacl.basics : sigma;
+  import tweednacl.basics : sigma;
   ubyte[16] z;
   ubyte[64] x;
   uint u;

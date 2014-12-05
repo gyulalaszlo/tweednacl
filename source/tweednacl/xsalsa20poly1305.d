@@ -24,10 +24,10 @@
   conjectured to meet the standard notions of privacy and authenticity.
 
 */
-module nacl.xsalsa20poly1305;
+module tweednacl.xsalsa20poly1305;
 
-import nacl.poly1305 : Poly1305;
-import nacl.xsalsa20 : XSalsa20;
+import tweednacl.poly1305 : Poly1305;
+import tweednacl.xsalsa20 : XSalsa20;
 
 struct XSalsa20Poly1305 {
   enum Primitive = "xsalsa20poly1305";
@@ -219,7 +219,7 @@ unittest {
 unittest
 {
   import std.random;
-  import nacl.basics : randomBuffer;
+  import tweednacl.basics : randomBuffer;
 
 
   void testSecretbox(Impl)() {

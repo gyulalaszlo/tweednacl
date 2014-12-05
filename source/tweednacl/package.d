@@ -129,20 +129,20 @@ All of the NaCl software is in the public domain.
     $(P Make all input values valid input values. Make memory errors.)
 
   */
-module nacl;
+module tweednacl;
 
-import nacl.encoded_bytes;
+import tweednacl.encoded_bytes;
 
-import nacl.curve25519xsalsa20poly1305 : Curve25519XSalsa20Poly1305;
-import nacl.ed25519 : Ed25519;
-import nacl.xsalsa20poly1305 : XSalsa20Poly1305;
-import nacl.poly1305 : Poly1305;
-import nacl.nonce_generator;
+import tweednacl.curve25519xsalsa20poly1305 : Curve25519XSalsa20Poly1305;
+import tweednacl.ed25519 : Ed25519;
+import tweednacl.xsalsa20poly1305 : XSalsa20Poly1305;
+import tweednacl.poly1305 : Poly1305;
+import tweednacl.nonce_generator;
 
 unittest {
   // this import is here so RDMD -unittest runs without linker errors
   // when running with only package.d
-  import nacl.test_data_crypto_sign_open;
+  import tweednacl.test_data_crypto_sign_open;
 }
 
 /**
@@ -179,7 +179,7 @@ struct KeyPair(Impl) {
 
   ---
   */
-alias generateSignKeypair(Impl=Ed25519, alias safeRnd=nacl.basics.safeRandomBytes)
+alias generateSignKeypair(Impl=Ed25519, alias safeRnd=tweednacl.basics.safeRandomBytes)
   = generateKeypair!(Impl, safeRnd);
 
 
@@ -249,7 +249,7 @@ ubyte[] sign(Impl=Ed25519, E, size_t keySize)(
   if ( keySize == Impl.SecretKeyBytes )
 {
   ulong smlen;
-  const msg = nacl.basics.toBytes( message );
+  const msg = tweednacl.basics.toBytes( message );
   ubyte[] o;
   o.length = msg.length + Impl.Bytes;
   Impl.sign( o, smlen, msg, sk  );
@@ -279,7 +279,7 @@ in {
   assert(signedData.length >= Impl.Bytes);
 }
 body {
-  const sm = nacl.basics.toBytes( signedData );
+  const sm = tweednacl.basics.toBytes( signedData );
   ubyte[] output;
   output.length = sm.length;
   ulong outputLen;
@@ -292,7 +292,7 @@ body {
 
 unittest {
   import std.random;
-  import nacl.basics : randomBuffer;
+  import tweednacl.basics : randomBuffer;
 
   auto o = generateSignKeypair();
 
@@ -483,7 +483,7 @@ version(unittest) {
 
   void testBoxers(A,B)(A aliceBoxer, B bobBoxer)
   {
-    import nacl.basics : randomBuffer, forgeBuffer;
+    import tweednacl.basics : randomBuffer, forgeBuffer;
     foreach(mlen;0..TryToForgeMessagesUpTo) {
       const msg = randomBuffer(mlen);
       auto cypherText = aliceBoxer.box(msg);
@@ -523,7 +523,7 @@ version(unittest) {
   */
 alias generateBoxKeypair(
     Impl=Curve25519XSalsa20Poly1305,
-    alias safeRnd=nacl.basics.safeRandomBytes)
+    alias safeRnd=tweednacl.basics.safeRandomBytes)
   = generateKeypair!(Impl, safeRnd);
 
 
@@ -586,7 +586,7 @@ unittest
 /**
   Shortcut that generates a secret key for the default implementation of SecretBoxes.
   */
-alias generateSecretBoxKey(Impl=XSalsa20Poly1305, alias safeRnd=nacl.basics.safeRandomBytes) =
+alias generateSecretBoxKey(Impl=XSalsa20Poly1305, alias safeRnd=tweednacl.basics.safeRandomBytes) =
   generateSecretKey!(Impl, safeRnd);
 
 /**
@@ -629,7 +629,7 @@ unittest {
 /**
   Shortcut that generates a secret key for the default implementation of Secret-Key Authentication.
   */
-alias generateAuthKey(Impl=Poly1305, alias safeRnd=nacl.basics.safeRandomBytes) =
+alias generateAuthKey(Impl=Poly1305, alias safeRnd=tweednacl.basics.safeRandomBytes) =
   generateSecretKey!(Impl, safeRnd);
 
 
@@ -682,7 +682,7 @@ void openAuth(Impl=Poly1305, Value, Key)(
 
 
 unittest {
-  import nacl.basics : randomBuffer, forgeBuffer;
+  import tweednacl.basics : randomBuffer, forgeBuffer;
   import std.random;
   import std.exception;
   alias Impl = Poly1305;
@@ -723,7 +723,7 @@ class BadSignatureError : Exception
 Params:
   Impl = The implementation to use (defaults to Ed25519)
  */
-auto generateKeypair(Impl, alias safeRnd=nacl.basics.safeRandomBytes)()
+auto generateKeypair(Impl, alias safeRnd=tweednacl.basics.safeRandomBytes)()
 {
   auto o = KeyPair!Impl();
   Impl.keypair!safeRnd( o.publicKey, o.secretKey );
@@ -733,7 +733,7 @@ auto generateKeypair(Impl, alias safeRnd=nacl.basics.safeRandomBytes)()
 /**
   Generates a secret key.
   */
-auto generateSecretKey(Impl, alias safeRnd=nacl.basics.safeRandomBytes)()
+auto generateSecretKey(Impl, alias safeRnd=tweednacl.basics.safeRandomBytes)()
 {
   Impl.Key k;
   safeRnd( k, Impl.KeyBytes );

@@ -27,10 +27,10 @@
   $(LINK http://cr.yp.to/papers.html#curve25519).
 
 */
-module nacl.curve25519;
+module tweednacl.curve25519;
 
-import nacl.basics : _121665, _9;
-import nacl.math25519;
+import tweednacl.basics : _121665, _9;
+import tweednacl.math25519;
 
 struct Curve25519 {
   enum Primitive = "curve25519";

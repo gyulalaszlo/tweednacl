@@ -1,7 +1,7 @@
-module nacl.encoded_bytes;
+module tweednacl.encoded_bytes;
 
 import std.stdio;
-import nacl.basics : toBytes;
+import tweednacl.basics : toBytes;
 
 /**
   Calculates the least common multiple using reducing it to a GCD problem.
@@ -189,7 +189,7 @@ unittest {
   // check against toHexString
   foreach(mlen;0..1024) {
     import std.digest.digest;
-    import nacl.basics : randomBuffer;
+    import tweednacl.basics : randomBuffer;
     auto msg = randomBuffer(mlen);
     assert( toHexString(msg) == bytesToHexUpper( msg ) );
   }

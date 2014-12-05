@@ -1,5 +1,5 @@
-module nacl.nonce_generator;
-import nacl.sha512;
+module tweednacl.nonce_generator;
+import tweednacl.sha512;
 
 /**
   Implments a simple nonce-generator.
@@ -227,7 +227,7 @@ auto generateNonce(size_t byteCount, alias Hash=SHA512)()
 {
   import std.datetime;
   import std.bitmanip;
-  import nacl.basics;
+  import tweednacl.basics;
 
 
   enum timeBytes = typeof(Clock.currStdTime()).sizeof;

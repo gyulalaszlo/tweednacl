@@ -1,6 +1,5 @@
-module nacl.salsa20;
+module tweednacl.salsa20;
 
-import nacl.basics : ld32, L32, st32;
 
 struct Salsa20 {
 
@@ -61,6 +60,8 @@ pure nothrow @safe @nogc int crypto_core_hsalsa20(
 }
 
 private:
+
+import tweednacl.basics : ld32, L32, st32;
 
 // Should the core use Salsa or HSalsa
 enum UseHSalsa {No, Yes};

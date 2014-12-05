@@ -17,9 +17,9 @@
   in "Cryptography in NaCl", Section 9. This authenticator is proven to meet
   the standard notion of unforgeability after a single message.
 */
-module nacl.poly1305;
+module tweednacl.poly1305;
 
-import nacl.basics;
+import tweednacl.basics;
 
 
 struct Poly1305 {

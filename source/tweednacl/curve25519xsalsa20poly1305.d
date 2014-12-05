@@ -45,11 +45,11 @@
 
 
   */
-module nacl.curve25519xsalsa20poly1305;
+module tweednacl.curve25519xsalsa20poly1305;
 
-import nacl.basics : _0, safeRandomBytes, sigma;
-import nacl.curve25519 : Curve25519;
-import nacl.xsalsa20poly1305 : XSalsa20Poly1305;
+import tweednacl.basics : _0, safeRandomBytes, sigma;
+import tweednacl.curve25519 : Curve25519;
+import tweednacl.xsalsa20poly1305 : XSalsa20Poly1305;
 
 
 struct Curve25519XSalsa20Poly1305 {
@@ -190,7 +190,7 @@ int crypto_box_beforenm(
     ref const CXSP.PublicKey pk,
     ref const CXSP.SecretKey sk)
 {
-  import nacl.salsa20;
+  import tweednacl.salsa20;
   ubyte s[32];
   Curve25519.scalarmult(s,sk,pk);
   return HSalsa20.core(k,_0,s,sigma);

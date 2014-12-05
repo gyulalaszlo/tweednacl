@@ -1,6 +1,4 @@
-module nacl.test_data_crypto_sign_open;
-
-import nacl.constants;
+module tweednacl.test_data_crypto_sign_open;
 
 enum crypto_sign_BYTES = 64;
 enum crypto_sign_SEEDBYTES = 32;

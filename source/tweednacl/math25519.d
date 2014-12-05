@@ -1,8 +1,8 @@
-module nacl.math25519;
+module tweednacl.math25519;
 
 package:
 
-import nacl.basics : gf,crypto_verify_32;
+import tweednacl.basics : gf,crypto_verify_32;
 
 
 pure nothrow @safe @nogc void set25519(out gf r, ref const gf a)

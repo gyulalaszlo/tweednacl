@@ -1,8 +1,8 @@
-module nacl.ed25519;
+module tweednacl.ed25519;
 
-import nacl.basics;
-import nacl.math25519;
-import nacl.sha512 : SHA512;
+import tweednacl.basics;
+import tweednacl.math25519;
+import tweednacl.sha512 : SHA512;
 
 
 // Description primitive for Ed25519
@@ -305,7 +305,7 @@ pure nothrow @safe @nogc bool unpackneg(ref gf[4] r,ref const ubyte[32] p)
 
 unittest {
 
-  import nacl.test_data_crypto_sign_open;
+  import tweednacl.test_data_crypto_sign_open;
 
   const ubyte keypair_seed[]
     = [ 0x42, 0x11, 0x51, 0xa4, 0x59, 0xfa, 0xea, 0xde, 0x3d, 0x24, 0x71,
@@ -399,7 +399,7 @@ unittest
   // with a keypair.
   foreach(i;0..testMessageLengthsUpTo) {
     const mlen = (2 << i) + i;
-    import nacl.basics : safeRandomBytes;
+    import tweednacl.basics : safeRandomBytes;
     auto msg = msgBuf[0..mlen];
     auto signedMsg = signedMsgBuf[0..mlen+Ed25519.Bytes];
     randomBuffer(msg[0..mlen]);
