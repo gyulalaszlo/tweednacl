@@ -1,11 +1,11 @@
 module tweednacl.salsa20;
 
+import tweednacl.nacl;
 
 struct Salsa20 {
-
-  enum Primitive = "salsa20";
-  enum Implementation = "crypto_core/salsa20/tweet";
-  enum Version = "-";
+  enum Primitive = CryptoPrimitive( "salsa20",
+      "crypto_core/salsa20/tweet"
+      );
 
   enum OutputBytes = 64;
   enum InputBytes = 16;
@@ -21,10 +21,9 @@ struct Salsa20 {
 }
 
 struct HSalsa20 {
-
-  enum Primitive = "hsalsa20";
-  enum Implementation = "crypto_core/hsalsa20/tweet";
-  enum Version = "-";
+  enum Primitive = CryptoPrimitive( "hsalsa20",
+      "crypto_core/hsalsa20/tweet"
+      );
 
   enum OutputBytes = 32;
   enum InputBytes = 16;

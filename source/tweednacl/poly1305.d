@@ -20,21 +20,25 @@
 module tweednacl.poly1305;
 
 import tweednacl.basics;
+import tweednacl.nacl;
 
 
 struct Poly1305 {
-  enum Primitive = "poly1305";
-  enum Version = "-";
-  enum Implementation = "crypto_onetimeauth/poly1305/tweet";
+  enum Primitive = CryptoPrimitive( "poly1305",
+      "crypto_onetimeauth/poly1305/tweet",
+      );
+  //enum Primitive = "poly1305";
+  //enum Version = "-";
+  //enum Implementation = "crypto_onetimeauth/poly1305/tweet";
 
-  enum Bytes = 16;
-  enum KeyBytes = 32;
+  //enum Bytes = 16;
+  //enum KeyBytes = 32;
 
   alias onetimeauth = crypto_onetimeauth;
   alias onetimeauthVerify = crypto_onetimeauth_verify;
 
-  alias Value = ubyte[Bytes];
-  alias Key = ubyte[KeyBytes];
+  alias Value = ubyte[16];
+  alias Key = ubyte[32];
 }
 /**
 

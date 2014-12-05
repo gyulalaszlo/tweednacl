@@ -29,13 +29,12 @@ module tweednacl.xsalsa20poly1305;
 import tweednacl.poly1305 : Poly1305;
 import tweednacl.xsalsa20 : XSalsa20;
 
-struct XSalsa20Poly1305 {
-  enum Primitive = "xsalsa20poly1305";
-  enum Implementation = "crypto_secretbox/xsalsa20poly1305/tweet";
-  enum Version = "-";
+import tweednacl.nacl;
 
-  enum KeyBytes = 32;
-  enum NonceBytes = 24;
+struct XSalsa20Poly1305 {
+  enum Info = CryptoPrimitive( "xsalsa20poly1305",
+      "crypto_secretbox/xsalsa20poly1305/tweet/d");
+
   /** The number of 0 bytes in front of the plaintext */
   enum ZeroBytes = 32;
   /** The number of 0 bytes in front of the encrypted box. */
@@ -44,18 +43,19 @@ struct XSalsa20Poly1305 {
   alias secretbox = crypto_secretbox;
   alias secretboxOpen = crypto_secretbox_open;
 
-  alias Key = ubyte[KeyBytes];
-  alias Nonce = ubyte[NonceBytes];
+  alias Key = ubyte[32];
+  alias Nonce = ubyte[24];
 
   // Box interface
-  enum BeforenmBytes = KeyBytes;
+
+  alias box = crypto_secretbox;
+  alias boxOpen = crypto_secretbox_open;
 
   alias afternm = crypto_secretbox;
   alias openAfternm = crypto_secretbox_open;
 
-  alias Beforenm = ubyte[BeforenmBytes];
+  alias Beforenm = Key;
 }
-
 /**
 
   The crypto_secretbox function encrypts and authenticates a message m[0], m[1],

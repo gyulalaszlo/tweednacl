@@ -51,32 +51,32 @@ import tweednacl.basics : _0, safeRandomBytes, sigma;
 import tweednacl.curve25519 : Curve25519;
 import tweednacl.xsalsa20poly1305 : XSalsa20Poly1305;
 
+import tweednacl.nacl;
+
 
 struct Curve25519XSalsa20Poly1305 {
-  enum Primitive = "curve25519xsalsa20poly1305";
-  enum Implementation = "crypto_box/curve25519xsalsa20poly1305/tweet";
-  enum Version = "-";
+  enum Primitive = CryptoPrimitive(
+      "curve25519xsalsa20poly1305",
+      "crypto_box/curve25519xsalsa20poly1305/tweet");
 
   alias keypair = crypto_box_keypair;
+
   alias box = crypto_box;
   alias boxOpen = crypto_box_open;
+
   alias beforenm = crypto_box_beforenm;
   alias afternm = crypto_box_afternm;
   alias openAfternm = crypto_box_open_afternm;
 
-  enum PublicKeyBytes = 32;
-  enum SecretKeyBytes = 32;
-  enum BeforeNmBytes = 32;
-  enum NonceBytes = 24;
   /** The number of 0 bytes in front of the plaintext */
   enum ZeroBytes = 32;
   /** The number of 0 bytes in front of the encrypted box. */
   enum BoxZeroBytes = 16;
 
-  alias PublicKey = ubyte[PublicKeyBytes];
-  alias SecretKey = ubyte[SecretKeyBytes];
-  alias Nonce = ubyte[NonceBytes];
-  alias Beforenm = ubyte[BeforeNmBytes];
+  alias PublicKey = ubyte[32];
+  alias SecretKey = ubyte[32];
+  alias Nonce = ubyte[24];
+  alias Beforenm = ubyte[32];
 }
 
 private alias CXSP = Curve25519XSalsa20Poly1305;

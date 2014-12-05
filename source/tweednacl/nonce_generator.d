@@ -20,13 +20,11 @@ struct DoubleStriderNonce(size_t nonceSize) {
 
   alias NonceS = NonceStream!(nonceSize, 2, 0xfe);
 
-  NonceS myNonces;
-  NonceS otherNonces;
-
-  /// The nonce I use to encrypt packages sent by me.
-  @property ref Nonce myNonce() { return myNonces.front; }
-  /// The nonce the other party uses to encrypt packages sent to me.
-  @property ref Nonce otherNonce() { return otherNonces.front; }
+  /// The nonce stream that I use to encrypt packages sent by me.
+  NonceS mine;
+  /// The nonce that mirrors the other partys $(D mine) stream, which
+  /// he or she uses to encrypt packages sent to me.
+  NonceS other;
 
   /** Initializes the nonce generator to 0  */
   this(Pk)(ref const Pk myPk, ref const Pk otherPk)
@@ -38,16 +36,10 @@ struct DoubleStriderNonce(size_t nonceSize) {
   this(Pk)(ref const Pk myPk, ref const Pk otherPk,
       ref const Nonce myStartNonce, ref const Nonce otherStartNonce )
   {
-    myNonces.bytes = myStartNonce;
-    otherNonces.bytes = otherStartNonce;
+    mine.bytes = myStartNonce;
+    other.bytes = otherStartNonce;
     initOffsetsAndNonces(myPk > otherPk);
   }
-
-  /** Sets the next nonce for the next */
-  void nextMine() { myNonces.popFront(); }
-
-  /** Sets the next nonce for the next */
-  void nextOther() { otherNonces.popFront(); }
 
   // Helper to initialize the offsets depending on if my public key is bigger
   // then the other partys.
@@ -55,11 +47,11 @@ struct DoubleStriderNonce(size_t nonceSize) {
   // setting the nonces
   private void initOffsetsAndNonces( bool isMyPkBigger )
   {
-    myNonces.offset = isMyPkBigger ? 0 : 1;
-    otherNonces.offset = isMyPkBigger ? 1 : 0;
+    mine.offset = isMyPkBigger ? 0 : 1;
+    other.offset = isMyPkBigger ? 1 : 0;
 
-    nextMine();
-    nextOther();
+    mine.popFront();
+    other.popFront();
   }
 
 }
@@ -87,11 +79,11 @@ unittest {
   // are the same as to.nextMine() and dont reappear.
   void sendMsg(NonceGen)( ref NonceGen from, ref NonceGen to )
   {
-    from.nextMine();
-    to.nextOther();
-    assert( from.myNonce == to.otherNonce );
-    assert( (from.myNonce in usedNonces) is null );
-    usedNonces[from.myNonce] = true;
+    from.mine.popFront();
+    to.other.popFront();
+    assert( from.mine.front == to.other.front );
+    assert( (from.mine.front in usedNonces) is null );
+    usedNonces[from.mine.front] = true;
   }
 
   // one-way
@@ -132,11 +124,14 @@ struct SingleNonce(size_t nonceSize) {
 
   NonceS nonces;
 
-  /// The nonce I use to encrypt packages sent by me and the other party uses 
-  /// to encrypt packages sent to me.
-  @property ref Nonce myNonce() { return nonces.front; }
-  /// ditto
-  @property ref Nonce otherNonce() { return nonces.front; }
+  @property ref auto mine() { return nonces; }
+  @property ref auto other() { return nonces; }
+
+  ///// The nonce I use to encrypt packages sent by me and the other party uses 
+  ///// to encrypt packages sent to me.
+  //@property ref Nonce myNonce() { return nonces.front; }
+  ///// ditto
+  //@property ref Nonce otherNonce() { return nonces.front; }
 
   /** Initializes the nonce generator to 0  */
   this( ref const Nonce startNonce )
@@ -144,11 +139,11 @@ struct SingleNonce(size_t nonceSize) {
     nonces.bytes = startNonce;
   }
 
-  /** Sets the next nonce for the next */
-  void nextMine() { nonces.popFront(); }
+  //[>* Sets the next nonce for the next <]
+  //void nextMine() { nonces.popFront(); }
 
-  /** Sets the next nonce for the next */
-  void nextOther() { nonces.popFront(); }
+  //[>* Sets the next nonce for the next <]
+  //void nextOther() { nonces.popFront(); }
 }
 
 /**
@@ -260,18 +255,20 @@ unittest {
 /** ditto */
 auto generateNonce(Impl, alias Hash=SHA512)()
 {
-  return generateNonce!(Impl.NonceBytes, Hash);
+  return generateNonce!(Impl.Nonce.length, Hash);
 }
 
 unittest {
   enum nonceSize = 64;
-  bool[ubyte[nonceSize]] usedNonces;
-  struct SomePrimitive {
-    enum NonceBytes = nonceSize;
+  alias NonceT = ubyte[nonceSize];
+  bool[NonceT] usedNonces;
+  struct TestPrimitive {
+    alias Nonce = NonceT;
+
   }
 
   foreach(i;0..1024) {
-    auto nonceFromHandshake = generateNonce!SomePrimitive();
+    auto nonceFromHandshake = generateNonce!TestPrimitive();
     assert( (nonceFromHandshake in usedNonces) is  null );
     usedNonces[nonceFromHandshake] = true;
   }

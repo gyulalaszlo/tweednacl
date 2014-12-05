@@ -139,25 +139,24 @@ import tweednacl.xsalsa20poly1305 : XSalsa20Poly1305;
 import tweednacl.poly1305 : Poly1305;
 import tweednacl.nonce_generator;
 
-unittest {
-  // this import is here so RDMD -unittest runs without linker errors
-  // when running with only package.d
-  import tweednacl.test_data_crypto_sign_open;
-}
-
 /**
   A generic pair of secret and public keys for signing data and an algorithm.
   */
-struct KeyPair(Impl) {
+struct KeyPair(Impl)
+{
   /** Accessor for the implementation */
   alias Primitive = Impl;
+
   /** The memory representation of a public key */
-  alias PublicKey = ubyte[Impl.PublicKeyBytes];
+  alias PublicKey = Impl.PublicKey;
+
   /** The memory representation of a secret key */
-  alias SecretKey = ubyte[Impl.SecretKeyBytes];
+  alias SecretKey = Impl.SecretKey;
+
   /** The public key to validate signed data with. */
   PublicKey publicKey;
-  /** The secret key to sign data with */
+
+  /** The secret key */
   SecretKey secretKey;
 }
 
@@ -244,9 +243,9 @@ Examples:
 }
 ---
   */
-ubyte[] sign(Impl=Ed25519, E, size_t keySize)(
-    const E[] message, ref const ubyte[keySize] sk )
-  if ( keySize == Impl.SecretKeyBytes )
+ubyte[] sign(Impl=Ed25519, E, Key)(
+    const E[] message, ref const Key sk )
+  if ( is( Key == Impl.SecretKey ) )
 {
   ulong smlen;
   const msg = tweednacl.basics.toBytes( message );
@@ -272,9 +271,9 @@ Returns: The plaintext message with the signature removed.
 Throws: BadSignatureError if the signature does not match the message.
 
   */
-ubyte[] openSigned(Impl=Ed25519, E, size_t keySize)(
-    const E[] signedData, ref const ubyte[keySize] pk )
-  if ( keySize == Impl.PublicKeyBytes )
+ubyte[] openSigned(Impl=Ed25519, E, Key)(
+    const E[] signedData, ref const Key pk )
+  if ( is( Key == Impl.PublicKey ) )
 in {
   assert(signedData.length >= Impl.Bytes);
 }
@@ -393,7 +392,7 @@ struct Boxer( Impl, NonceGenerator )
   enum BoxZeroBytes = Impl.BoxZeroBytes;
 
   private NonceGenerator nonceGenerator;
-  private Impl.Beforenm sharedSecret;
+  private Impl.Beforenm beforenm;
 
   /**
     Packages a message from me to the other party.
@@ -433,8 +432,8 @@ struct Boxer( Impl, NonceGenerator )
     msg[0..ZeroBytes] = 0;
     msg[ZeroBytes..msgLen] = plainText[0..plainText.length];
 
-    Impl.afternm( o, msg, nonceGenerator.myNonce, sharedSecret );
-    if (autoAck) nonceGenerator.nextMine();
+    Impl.afternm( o, msg, nonceGenerator.mine.front, beforenm );
+    if (autoAck) ack();
     return o[BoxZeroBytes..msgLen];
   }
 
@@ -445,7 +444,7 @@ struct Boxer( Impl, NonceGenerator )
     who hasnt received the last message will be invalid.
     */
   void ack() {
-    nonceGenerator.nextMine();
+    nonceGenerator.mine.popFront();
   }
 
   /**
@@ -466,11 +465,11 @@ struct Boxer( Impl, NonceGenerator )
     ct[0..BoxZeroBytes] = 0;
     ct[BoxZeroBytes..msgLen] = cypherText[0..$];
 
-    if (!Impl.openAfternm( o, ct, nonceGenerator.otherNonce, sharedSecret ))
+    if (!Impl.openAfternm( o, ct, nonceGenerator.other.front, beforenm ))
       throw new BadSignatureError;
 
     // increment the nonce only on successful decoding
-    nonceGenerator.nextOther();
+    nonceGenerator.other.popFront();
 
     return o[ZeroBytes..msgLen];
   }
@@ -554,12 +553,12 @@ if ( is(MP == Impl.PublicKey)
     && is( OP == Impl.PublicKey)
     && is(Nonce == Impl.Nonce))
 {
-  alias NonceGenerator=DoubleStriderNonce!(Impl.NonceBytes);
-  Impl.Beforenm sharedSecret;
-  Impl.beforenm( sharedSecret, otherPublic, mySecret );
+  alias NonceGenerator=DoubleStriderNonce!(Impl.Nonce.length);
+  Impl.Beforenm beforenm;
+  Impl.beforenm( beforenm, otherPublic, mySecret );
   return Boxer!(Impl, NonceGenerator)(
       NonceGenerator( myPublic, otherPublic, nonce, nonce ),
-      sharedSecret,
+      beforenm,
       );
 }
 
@@ -610,7 +609,7 @@ auto secretBoxer(Impl=XSalsa20Poly1305, Key, Nonce)(
     ref const Nonce n)
   if (is(Key == Impl.Key) && is(Nonce == Impl.Nonce))
 {
-  alias NonceGenerator=SingleNonce!(Impl.NonceBytes);
+  alias NonceGenerator=SingleNonce!(Impl.Nonce.length);
   return Boxer!(Impl, NonceGenerator)( NonceGenerator(n), k);
 }
 
@@ -736,7 +735,7 @@ auto generateKeypair(Impl, alias safeRnd=tweednacl.basics.safeRandomBytes)()
 auto generateSecretKey(Impl, alias safeRnd=tweednacl.basics.safeRandomBytes)()
 {
   Impl.Key k;
-  safeRnd( k, Impl.KeyBytes );
+  safeRnd( k, Impl.Key.length );
   return k;
 }
 
