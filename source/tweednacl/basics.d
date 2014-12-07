@@ -4,33 +4,33 @@ public:
 
 
 /**
-  The crypto_verify_16 function returns 0 if x[0], x[1], ..., x[15] are the
-  same as y[0], y[1], ..., y[15]. Otherwise it returns -1.
+The crypto_verify_16 function returns 0 if x[0], x[1], ..., x[15] are the
+same as y[0], y[1], ..., y[15]. Otherwise it returns -1.
 
-  This function is safe to use for secrets x[0], x[1], ..., x[15], y[0], y[1],
-  ..., y[15]. The time taken by crypto_verify_16 is independent of the contents
-  of x[0], x[1], ..., x[15], y[0], y[1], ..., y[15]. In contrast, the standard C
-  comparison function memcmp(x,y,16) takes time that depends on the longest
-  matching prefix of x and y, often allowing easy timing attacks.
+This function is safe to use for secrets x[0], x[1], ..., x[15], y[0], y[1],
+..., y[15]. The time taken by crypto_verify_16 is independent of the contents
+of x[0], x[1], ..., x[15], y[0], y[1], ..., y[15]. In contrast, the standard C
+comparison function memcmp(x,y,16) takes time that depends on the longest
+matching prefix of x and y, often allowing easy timing attacks.
 
- */
+*/
 pure nothrow @safe @nogc int crypto_verify_16(ref const ubyte[16] x, ref const ubyte[16] y)
 {
   return vn(x,y,16);
 }
 
 /**
-  Similar verification function as crypto_verify_16 , but operating on 32
-  byte blocks.
- */
+Similar verification function as crypto_verify_16 , but operating on 32
+byte blocks.
+*/
 pure nothrow @safe @nogc int crypto_verify_32(ref const ubyte[32] x, ref const ubyte[32] y)
 {
   return vn(x,y,32);
 }
 
 /**
-  Converts any array slice into a byte array slice.
-  */
+Converts any array slice into a byte array slice.
+*/
 pure nothrow @trusted @nogc const(ubyte)[] toBytes(T)(T[] input)
 out(o) {
   if (input.length > 0)
@@ -54,30 +54,30 @@ const ubyte[16] sigma = [ 'e','x','p','a','n','d',' ','3','2','-','b','y','t','e
 
 immutable ubyte[16] _0 = [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0];
 immutable ubyte[32] _9 = [9, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
 
 const gf gf0;
 const gf gf1 = [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0];
 const gf _121665 = [0xDB41,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0];
 const gf D = [0x78a3, 0x1359, 0x4dca, 0x75eb, 0xd8ab, 0x4141, 0x0a4d,
-        0x0070, 0xe898, 0x7779, 0x4079, 0x8cc7, 0xfe73, 0x2b6f, 0x6cee,
-        0x5203];
+0x0070, 0xe898, 0x7779, 0x4079, 0x8cc7, 0xfe73, 0x2b6f, 0x6cee,
+0x5203];
 
 const gf D2 = [0xf159, 0x26b2, 0x9b94, 0xebd6, 0xb156, 0x8283, 0x149a,
-        0x00e0, 0xd130, 0xeef3, 0x80f2, 0x198e, 0xfce7, 0x56df, 0xd9dc,
-        0x2406];
+0x00e0, 0xd130, 0xeef3, 0x80f2, 0x198e, 0xfce7, 0x56df, 0xd9dc,
+0x2406];
 
 const gf X = [0xd51a, 0x8f25, 0x2d60, 0xc956, 0xa7b2, 0x9525, 0xc760,
-        0x692c, 0xdc5c, 0xfdd6, 0xe231, 0xc0a4, 0x53fe, 0xcd6e, 0x36d3,
-        0x2169];
+0x692c, 0xdc5c, 0xfdd6, 0xe231, 0xc0a4, 0x53fe, 0xcd6e, 0x36d3,
+0x2169];
 
 const gf Y = [0x6658, 0x6666, 0x6666, 0x6666, 0x6666, 0x6666, 0x6666,
-        0x6666, 0x6666, 0x6666, 0x6666, 0x6666, 0x6666, 0x6666, 0x6666,
-        0x6666];
+0x6666, 0x6666, 0x6666, 0x6666, 0x6666, 0x6666, 0x6666, 0x6666,
+0x6666];
 
 const gf I = [0xa0b0, 0x4a0e, 0x1b27, 0xc4ee, 0xe478, 0xad2f, 0x1806,
-        0x2f43, 0xd7a7, 0x3dfb, 0x0099, 0x2b4d, 0xdf0b, 0x4fc1, 0x2480,
-        0x2b83];
+0x2f43, 0xd7a7, 0x3dfb, 0x0099, 0x2b4d, 0xdf0b, 0x4fc1, 0x2480,
+0x2b83];
 
 pure nothrow @safe @nogc uint L32(uint x,int c)
 {
@@ -95,7 +95,7 @@ pure nothrow @safe @nogc uint ld32(ref const ubyte[4] x)
 pure nothrow @safe @nogc ulong dl64(ref const ubyte[8] x)
 {
   ulong u=0;
-  foreach(ulong i;0..8) u=(u<<8)|x[i];
+  foreach(size_t i;0..8) u=(u<<8)|x[i];
   return u;
 }
 
@@ -134,10 +134,10 @@ version(unittest) {
   enum testMessageLengthsUpTo = 16;
 
   /**
-    Helper to generate a pseudo-random buffer.
-    The generated random numbers are from std.random, so they are not
-    safe for generating keys. Use
-    */
+  Helper to generate a pseudo-random buffer.
+  The generated random numbers are from std.random, so they are not
+  safe for generating keys. Use
+  */
   void randomBuffer(T)( T[] m )
   {
     foreach(ref e;m) e = uniform(T.min, T.max);
@@ -173,10 +173,10 @@ version(unittest) {
 
 version(OSX) {
   /**
-    Cryptographically secure random bytes on OSX are sourced from /dev/random
-    as suggested by Apple.
-    */
-  @system void safeRandomBytes( ubyte[] output, size_t count)
+  Cryptographically secure random bytes on OSX are sourced from /dev/random
+  as suggested by Apple.
+  */
+  public @system void safeRandomBytes( ubyte[] output, size_t count)
   {
     import core.stdc.stdio;
     import std.exception;
@@ -186,6 +186,88 @@ version(OSX) {
       output[i] = cast(ubyte)(fgetc(fp));
     }
   }
-} else {
+} else version(Windows) {
+  import core.sys.windows.windows;
+  alias HCRYPTPROV = ULONG_PTR;
+  extern (C) BOOL CryptGenRandom( HCRYPTPROV hProv, DWORD dwLen, BYTE *pbBuffer );
+  extern (C) BOOL CryptAcquireContext (
+                                  HCRYPTPROV *phProv,
+                                  LPCTSTR pszContainer,
+                                  LPCTSTR pszProvider,
+                                  DWORD dwProvType,
+                                  DWORD dwFlags
+                                  );
+  extern (C) BOOL CryptReleaseContext(HCRYPTPROV,DWORD);
+
+  enum PROV_RSA_FULL = 1;
+  enum CRYPT_NEWKEYSET = 8;
+
+  class WindowsRandomError : Exception
+  {
+    this() { super("Error during secure random number generation"); }
+  }
+
+  // "Keyset does not exist"
+  enum NTE_BAD_KEYSET = -2146893802;
+
+  auto makeSecureRandomSequence()
+  {
+    // from: http://stackoverflow.com/questions/21420219/how-to-get-cryptographically-strong-random-bytes-with-windows-apis
+    // ---
+    // " a simple little class that tries to get an RSA Crytographic "provider",
+    // and if that fails it tries to create one. Then if all is well, generate
+    // will fill your buffer with love. Uhm... I mean random bytes."
+    struct RandomSequence
+    {
+      ~this() {
+        if (hProvider == 0) CryptReleaseContext(hProvider, 0U);
+      }
+
+      BOOL generate(BYTE* buf, DWORD len) {
+        if (hProvider == 0) {
+          return CryptGenRandom(hProvider, len, buf);
+        }
+        throw new WindowsRandomError();
+      }
+    private:
+      HCRYPTPROV hProvider;
+      void initialize()
+      {
+        hProvider = 0;
+        if (FALSE == CryptAcquireContext(&hProvider, null, null, PROV_RSA_FULL, 0)) {
+          // failed, should we try to create a default provider?
+          if (NTE_BAD_KEYSET == GetLastError()) {
+            if (FALSE == CryptAcquireContext(&hProvider, null, null, PROV_RSA_FULL, CRYPT_NEWKEYSET)) {
+              // ensure the provider is NULL so we could use a backup plan
+              hProvider = 0;
+            }
+          }
+        }
+      }
+    }
+
+    auto o = RandomSequence();
+    o.initialize();
+    return o;
+  }
+
+  /**
+  Cryptographically secure random bytes on OSX are sourced from /dev/random
+  as suggested by Apple.
+
+  Throws: WindowsRandomError if not successful
+  */
+  public @system void safeRandomBytes( ubyte[] output, size_t count)
+  {
+    // TODO: do this on a thread-local storage space
+    auto s = makeSecureRandomSequence();
+    s.generate(&output[0], cast(DWORD)(count));
+  }
+
+}else {
   static assert( false, "void safeRandomBytes( ubyte[] output, size_t count) not implemented" );
+}
+
+version(Windows) {
+
 }

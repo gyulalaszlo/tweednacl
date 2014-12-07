@@ -59,7 +59,7 @@ struct XSalsa20 {
   function then returns 0.
 
 */
-pure nothrow @safe @nogc int crypto_stream(ubyte[] c,ulong d,
+pure nothrow @safe @nogc int crypto_stream(ubyte[] c,size_t d,
     ref const XSalsa20.Nonce nonce,
     ref const XSalsa20.Key k)
 {
@@ -80,7 +80,7 @@ pure nothrow @safe @nogc int crypto_stream(ubyte[] c,ulong d,
   used to decrypt.
 
 */
-pure nothrow @safe @nogc int crypto_stream_xor(ubyte[] c,const(ubyte)[] m,ulong d,
+pure nothrow @safe @nogc int crypto_stream_xor(ubyte[] c,const(ubyte)[] m,size_t d,
     ref const XSalsa20.Nonce nonce,
     ref const XSalsa20.Key k)
 {
@@ -100,7 +100,7 @@ enum salsaRoundNonceBytes = 8;
 pure nothrow @safe @nogc int crypto_stream_salsa20_xor_impl(bool useMessage=true)(
     ubyte[] c,
     const(ubyte)[] m,
-    ulong b,
+    size_t b,
     ref const ubyte[salsaRoundNonceBytes] n,
     ref const XSalsa20.Key k
     )
@@ -146,7 +146,7 @@ pure nothrow @safe @nogc int crypto_stream_salsa20_xor_impl(bool useMessage=true
 
 const(const(ubyte)[]) nullBytes = [];
 
-pure nothrow @safe @nogc int crypto_stream_salsa20(ubyte[] c,ulong d,
+pure nothrow @safe @nogc int crypto_stream_salsa20(ubyte[] c,size_t d,
     ref const ubyte[salsaRoundNonceBytes] n,
     ref const XSalsa20.Key k)
 {
@@ -154,7 +154,7 @@ pure nothrow @safe @nogc int crypto_stream_salsa20(ubyte[] c,ulong d,
   return crypto_stream_salsa20_xor_impl!false(c,nullBytes,d,n,k);
 }
 
-pure nothrow @safe @nogc int crypto_stream_salsa20_xor(ubyte[] c, const(ubyte)[] m,ulong b,
+pure nothrow @safe @nogc int crypto_stream_salsa20_xor(ubyte[] c, const(ubyte)[] m,size_t b,
     ref const ubyte[salsaRoundNonceBytes] n,
     ref const XSalsa20.Key k)
 {

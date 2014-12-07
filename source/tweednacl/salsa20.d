@@ -162,7 +162,7 @@ unittest {
   ubyte[64] h;
 
   int i;
-  long pos = 0;
+  size_t pos = 0;
   for (i = 0; i < 8; ++i)
     input[i] = noncesuffix[i];
   do {

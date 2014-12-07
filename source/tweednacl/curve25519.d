@@ -71,7 +71,7 @@ pure nothrow @safe @nogc int crypto_scalarmult(ref Curve25519.Value q,
     d[i]=a[i]=c[i]=0;
   }
   a[0]=d[0]=1;
-  for(long i=254;i>=0;--i) {
+  for(size_t i=254;i>=0;--i) {
     r=(z[i>>3]>>(i&7))&1;
     sel25519(a,b,r);
     sel25519(c,d,r);

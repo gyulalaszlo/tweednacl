@@ -247,7 +247,7 @@ ubyte[] sign(Impl=Ed25519, E, Key)(
     const E[] message, ref const Key sk )
   if ( is( Key == Impl.SecretKey ) )
 {
-  ulong smlen;
+  size_t smlen;
   const msg = tweednacl.basics.toBytes( message );
   ubyte[] o;
   o.length = msg.length + Impl.Bytes;
@@ -281,7 +281,7 @@ body {
   const sm = tweednacl.basics.toBytes( signedData );
   ubyte[] output;
   output.length = sm.length;
-  ulong outputLen;
+  size_t outputLen;
   if (!Impl.signOpen( output, outputLen, sm, pk ))
     throw new BadSignatureError();
   output.length = outputLen;

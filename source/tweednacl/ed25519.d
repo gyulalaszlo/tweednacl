@@ -66,7 +66,7 @@ bool crypto_sign_keypair(alias safeRnd)(ref Ed25519.PublicKey pk,
   allocate at least mlen+Ed25519.ValueBytes bytes for sm.
 */
 pure nothrow @safe @nogc
-bool crypto_sign(ubyte[] sm, out ulong smlen, const ubyte[] m,
+bool crypto_sign(ubyte[] sm, out size_t smlen, const ubyte[] m,
     ref const Ed25519.SecretKey sk)
 in {
   assert( sm.length >= m.length + Ed25519.Bytes );
@@ -118,7 +118,7 @@ body {
 
    */
 pure nothrow @safe @nogc
-bool crypto_sign_open(ubyte[] m, ref ulong mlen, const ubyte[] sm,
+bool crypto_sign_open(ubyte[] m, ref size_t mlen, const ubyte[] sm,
     ref const Ed25519.PublicKey pk)
 in {
   assert( m.length >= sm.length );
@@ -232,9 +232,9 @@ const ulong L[32] = [
 pure nothrow @safe @nogc void modL(ref ubyte[32] r, ref long[64] x)
 {
   long carry;
-  for (long i = 63;i >= 32;--i) {
+  for (size_t i = 63;i >= 32;--i) {
     carry = 0;
-    long j;
+    size_t j;
     for (j = i - 32;j < i - 12;++j) {
       x[j] += carry - 16 * x[i] * L[j - (i - 32)];
       carry = (x[j] + 128) >> 8;
@@ -442,11 +442,8 @@ unittest {
   Ed25519.PublicKey pk;
   Ed25519.SecretKey sk;
 
-  ulong siglen;
-  ulong smlen;
-  ulong mlen;
-  uint i;
-  uint j;
+  size_t siglen, smlen, mlen;
+  size_t i,j;
 
   sig[] = 0;
   import std.string;
@@ -498,7 +495,7 @@ unittest
   ubyte[maxLen] msgBuf;
   ubyte[maxLen + Ed25519.Bytes] decodedMsgBuf;
   ubyte[maxLen + Ed25519.Bytes] signedMsgBuf;
-  ulong msgLen, signedMsgLen;
+  size_t msgLen, signedMsgLen;
   // generate a random message and test if it can be signed/opened
   // with a keypair.
   foreach(i;0..testMessageLengthsUpTo) {
