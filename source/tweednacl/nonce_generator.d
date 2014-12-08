@@ -1,5 +1,6 @@
 module tweednacl.nonce_generator;
-import tweednacl.sha512;
+import tweednacl.basics;
+//import tweednacl.sha512;
 
 /**
   Implments a simple nonce-generator.
@@ -217,24 +218,12 @@ unittest {
 
   ---
   */
-auto generateNonce(size_t byteCount, alias Hash=SHA512)()
-  if (byteCount >= long.sizeof && (Hash.Bytes + long.sizeof) >= byteCount)
+auto generateNonce(size_t byteCount, alias safeRnd=safeRandomBytes)()
 {
-  import std.datetime;
-  import std.bitmanip;
   import tweednacl.basics;
 
-
-  enum timeBytes = typeof(Clock.currStdTime()).sizeof;
-  enum firstTimeByte = byteCount - timeBytes;
-
   ubyte[byteCount] nonce;
-  Hash.HashValue hsh;
-  immutable ubyte[timeBytes] timeAsBytes = nativeToLittleEndian(Clock.currStdTime());
-
-  Hash.hash( hsh, timeAsBytes );
-  nonce[0..firstTimeByte] = hsh[0..firstTimeByte];
-  nonce[firstTimeByte..byteCount] = timeAsBytes;
+  safeRnd(nonce, byteCount);
 
   return nonce;
 }
@@ -253,9 +242,9 @@ unittest {
 
 
 /** ditto */
-auto generateNonce(Impl, alias Hash=SHA512)()
+auto generateNonce(Impl, alias safeRnd=safeRandomBytes)()
 {
-  return generateNonce!(Impl.Nonce.length, Hash);
+  return generateNonce!(Impl.Nonce.length, safeRnd);
 }
 
 unittest {
@@ -274,3 +263,4 @@ unittest {
   }
 
 }
+

@@ -40,88 +40,90 @@ struct Curve25519 {
   enum Bytes = 32;
   enum ScalarBytes = 32;
 
-  alias scalarmult = crypto_scalarmult;
-  alias scalarmultBase = crypto_scalarmult_base;
-
   alias Value = ubyte[Bytes];
   alias Scalar = ubyte[ScalarBytes];
-}
 
-/**
-  This function multiplies a group element p[0], ..., p[Curve25519.Bytes-1]
-  by an integer n[0], ..., n[Curve25519.ScalarBytes-1].
+  /**
+    This function multiplies a group element p[0], ..., p[Curve25519.Bytes-1]
+    by an integer n[0], ..., n[Curve25519.ScalarBytes-1].
 
-  It puts the resulting group element into
-  q[0], ..., q[Curve25519.Bytes-1] and returns 0.
-*/
-pure nothrow @safe @nogc int crypto_scalarmult(ref Curve25519.Value q,
-    ref const Curve25519.Scalar n,
-    ref const Curve25519.Value p)
-{
-  ubyte z[32];
-  long[80] x;
-  long r;
-  gf a,b,c,d,e,f;
-  foreach(i;0..31) z[i]=n[i];
-  z[31]=(n[31]&127)|64;
-  z[0]&=248;
-  unpack25519(x[0..16],p);
-  foreach(i;0..16) {
-    b[i]=x[i];
-    d[i]=a[i]=c[i]=0;
-  }
-  a[0]=d[0]=1;
-  for(int i=254;i>=0;--i) {
-    r=(z[i>>3]>>(i&7))&1;
-    sel25519(a,b,r);
-    sel25519(c,d,r);
-    A(e,a,c);
-    Z(a,a,c);
-    A(c,b,d);
-    Z(b,b,d);
-    S(d,e);
-    S(f,a);
-    M(a,c,a);
-    M(c,b,e);
-    A(e,a,c);
-    Z(a,a,c);
-    S(b,a);
-    Z(c,d,f);
-    M(a,c,_121665);
-    A(a,a,d);
-    M(c,c,a);
-    M(a,d,f);
-    M(d,b,x[0..16]);
-    S(b,e);
-    sel25519(a,b,r);
-    sel25519(c,d,r);
-  }
-  foreach(i;0..16) {
-    x[i+16]=a[i];
-    x[i+32]=c[i];
-    x[i+48]=b[i];
-    x[i+64]=d[i];
-  }
-  inv25519(x[32..48],x[32..48]);
-  M(x[16..32],x[16..32],x[32..48]);
-  pack25519(q, x[16..32]);
-  return 0;
-}
-
-/**
-
-  This function computes the scalar product of a standard
-  group element and an integer n[0], ..., n[Curve25519.ScalarBytes-1]. It
-  puts the resulting group element into q[0], ..., q[Curve25519.ValueBytes-1]
-  and returns 0.
-
+    It puts the resulting group element into
+    q[0], ..., q[Curve25519.Bytes-1] and returns 0.
   */
-pure nothrow @safe @nogc int crypto_scalarmult_base(ref Curve25519.Value q,
-    ref const Curve25519.Scalar n)
-{
-  return crypto_scalarmult(q,n,_9);
+  pure nothrow @safe @nogc static int scalarmult(
+      ref Curve25519.Value q,
+      ref const Curve25519.Scalar n,
+      ref const Curve25519.Value p)
+  {
+    ubyte z[32];
+    long[80] x;
+    long r;
+    gf a,b,c,d,e,f;
+    foreach(i;0..31) z[i]=n[i];
+    z[31]=(n[31]&127)|64;
+    z[0]&=248;
+    unpack25519(x[0..16],p);
+    foreach(i;0..16) {
+      b[i]=x[i];
+      d[i]=a[i]=c[i]=0;
+    }
+    a[0]=d[0]=1;
+    for(int i=254;i>=0;--i) {
+      r=(z[i>>3]>>(i&7))&1;
+      sel25519(a,b,r);
+      sel25519(c,d,r);
+      A(e,a,c);
+      Z(a,a,c);
+      A(c,b,d);
+      Z(b,b,d);
+      S(d,e);
+      S(f,a);
+      M(a,c,a);
+      M(c,b,e);
+      A(e,a,c);
+      Z(a,a,c);
+      S(b,a);
+      Z(c,d,f);
+      M(a,c,_121665);
+      A(a,a,d);
+      M(c,c,a);
+      M(a,d,f);
+      M(d,b,x[0..16]);
+      S(b,e);
+      sel25519(a,b,r);
+      sel25519(c,d,r);
+    }
+    foreach(i;0..16) {
+      x[i+16]=a[i];
+      x[i+32]=c[i];
+      x[i+48]=b[i];
+      x[i+64]=d[i];
+    }
+    inv25519(x[32..48],x[32..48]);
+    M(x[16..32],x[16..32],x[32..48]);
+    pack25519(q, x[16..32]);
+    return 0;
+  }
+
+  /**
+
+    This function computes the scalar product of a standard
+    group element and an integer n[0], ..., n[Curve25519.ScalarBytes-1]. It
+    puts the resulting group element into q[0], ..., q[Curve25519.ValueBytes-1]
+    and returns 0.
+
+    */
+  pure nothrow @safe @nogc static int scalarmultBase(
+      ref Curve25519.Value q,
+      ref const Curve25519.Scalar n)
+  {
+    return crypto_scalarmult(q,n,_9);
+  }
+
 }
 
+alias crypto_scalarmult = Curve25519.scalarmult;
+alias crypto_scalarmult_base = Curve25519.scalarmultBase;
 
 unittest {
   ubyte alicesk[32]

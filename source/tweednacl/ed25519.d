@@ -1,3 +1,17 @@
+/**
+  $(BIG Security model)
+
+  The crypto_sign function is designed to meet the standard notion of
+  unforgeability for a public-key signature scheme under chosen-message attacks. 
+
+  $(BIG Selected primitive)
+
+  crypto_sign is crypto_sign_edwards25519sha512batch, a particular combination
+  of Curve25519 in Edwards form and SHA-512 into a signature scheme suitable
+  for high-speed batch verification. This function is conjectured to meet the
+  standard notion of unforgeability under chosen-message attacks.
+
+  */
 module tweednacl.ed25519;
 
 import tweednacl.basics;
@@ -6,14 +20,10 @@ import tweednacl.math25519;
 import tweednacl.sha512 : SHA512;
 
 
-// Description primitive for Ed25519
-struct Ed25519 {
+struct Ed25519
+{
   enum Primitive = CryptoPrimitive("ed25519",
       "crypto_sign/ed25519/tweet" );
-
-  alias keypair = crypto_sign_keypair;
-  alias sign = crypto_sign;
-  alias signOpen = crypto_sign_open;
 
   enum Bytes = 64;
   enum SeedBytes = 32;
@@ -21,139 +31,144 @@ struct Ed25519 {
   alias PublicKey = ubyte[32];
   alias SecretKey = ubyte[64];
   alias Signature = ubyte[Bytes];
-}
 
-private alias Hash = SHA512;
+  private alias Hash = SHA512;
+  /**
+    The crypto_sign_keypair function randomly generates a secret key and a
+    corresponding public key. It puts the secret key into sk[0], sk[1], ...,
+    sk[crypto_sign_SECRETKEYBYTES-1] and puts the public key into pk[0], pk[1],
+    ..., pk[crypto_sign_PUBLICKEYBYTES-1]. It then returns true.
 
-/**
-  The crypto_sign_keypair function randomly generates a secret key and a
-  corresponding public key. It puts the secret key into sk[0], sk[1], ...,
-  sk[crypto_sign_SECRETKEYBYTES-1] and puts the public key into pk[0], pk[1],
-  ..., pk[crypto_sign_PUBLICKEYBYTES-1]. It then returns true.
-
-Params:
-  safeRnd = a cryptographically safe random number generator like safeRandomBytes(ubyte[], size_t n)
-  pk = the output for the public key
-  sk = the output for the secret key
- */
-bool crypto_sign_keypair(alias safeRnd)(ref Ed25519.PublicKey pk,
-   ref Ed25519.SecretKey sk)
-{
-  Hash.Value d;
-  gf p[4];
-
-  safeRnd(sk, 32);
-  Hash.hash(d, sk[0..32]);
-  d[0] &= 248;
-  d[31] &= 127;
-  d[31] |= 64;
-
-  scalarbase(p,d[0..32]);
-  pack(pk,p);
-
-  foreach(i;0..32) sk[32 + i] = pk[i];
-  return true;
-}
-
-
-/*
-  The crypto_sign function signs a message m[0], ..., m[mlen-1] using the
-  signer's secret key sk[0], sk[1], ..., sk[crypto_sign_SECRETKEYBYTES-1], puts
-  the length of the signed message into smlen and puts the signed message into
-  sm[0], sm[1], ..., sm[smlen-1]. It then returns 0.
-
-  The maximum possible length smlen is mlen+Ed25519.ValueBytes. The caller must
-  allocate at least mlen+Ed25519.ValueBytes bytes for sm.
-*/
-pure nothrow @safe @nogc
-bool crypto_sign(ubyte[] sm, out size_t smlen, const ubyte[] m,
-    ref const Ed25519.SecretKey sk)
-in {
-  assert( sm.length >= m.length + Ed25519.Bytes );
-}
-body {
-  size_t n = m.length;
-  Hash.Value d,h,r;
-  long[64] x;
-  gf p[4];
-
-  Hash.hash(d, sk[0..32]);
-  d[0] &= 248;
-  d[31] &= 127;
-  d[31] |= 64;
-
-  smlen = n+64;
-  foreach(i;0..n) sm[64 + i] = m[i];
-  foreach(i;0..32) sm[32 + i] = d[32 + i];
-
-  Hash.hash(r, sm[32..32+n+32]); //, n+32);
-  reduce(r);
-  scalarbase(p,r[0..32]);
-  pack(sm[0..32],p);
-
-  foreach(i;0..32) sm[i+32] = sk[i+32];
-  Hash.hash(h,sm[0..n+64]);
-  reduce(h);
-
-  foreach(i;0..64) x[i] = 0;
-  foreach(i;0..32) x[i] = ulong(r[i]);
-  foreach(i;0..32) foreach(j;0..32) x[i+j] += h[i] * ulong(d[j]);
-  modL(sm[32..64],x);
-
-  return true;
-}
-
-/*
-  The crypto_sign_open function verifies the signature in sm[0], ..., sm[smlen-1]
-  using the signer's public key pk[0], pk[1], ...,
-  pk[crypto_sign_PUBLICKEYBYTES-1]. The crypto_sign_open function puts the length
-  of the message into mlen and puts the message into m[0], m[1], ..., m[mlen-1].
-  It then returns true.
-
-  The maximum possible length mlen is smlen. The caller must allocate at least
-  smlen bytes for m.
-
-  If the signature fails verification, crypto_sign_open instead returns false,
-  possibly after modifying m[0], m[1], etc.
-
+  Params:
+    safeRnd = a cryptographically safe random number generator like safeRandomBytes(ubyte[], size_t n)
+    pk = the output for the public key
+    sk = the output for the secret key
    */
-pure nothrow @safe @nogc
-bool crypto_sign_open(ubyte[] m, ref size_t mlen, const ubyte[] sm,
-    ref const Ed25519.PublicKey pk)
-in {
-  assert( m.length >= sm.length );
-}
-body {
-  size_t n = sm.length;
-  ubyte[32] t;
-  Hash.Value h;
-  gf[4] p,q;
+  static bool keypair(alias safeRnd)(
+      ref PublicKey pk,
+      ref SecretKey sk)
+  {
+    Hash.Value d;
+    gf p[4];
 
-  mlen = -1;
-  if (n < 64) return false;
+    safeRnd(sk, 32);
+    Hash.hash(d, sk[0..32]);
+    d[0] &= 248;
+    d[31] &= 127;
+    d[31] |= 64;
 
-  if (!unpackneg(q,pk[0..32])) return false;
+    scalarbase(p,d[0..32]);
+    pack(pk,p);
 
-  foreach(i;0..n) m[i] = sm[i];
-  foreach(i;0..32) m[i+32] = pk[i];
-  Hash.hash(h,m[0..n]);
-  reduce(h);
-  scalarmult(p,q,h[0..32]);
-
-  scalarbase(q,sm[32..64]);
-  add(p,q);
-  pack(t,p);
-
-  n -= 64;
-  if (crypto_verify_32(sm[0..32], t)) {
-    foreach(i;0..n) m[i] = 0;
-    return false;
+    foreach(i;0..32) sk[32 + i] = pk[i];
+    return true;
   }
 
-  foreach(i;0..n) m[i] = sm[i + 64];
-  mlen = n;
-  return true;
+  /**
+    The crypto_sign function signs a message m[0], ..., m[mlen-1] using the
+    signer's secret key sk[0], sk[1], ..., sk[crypto_sign_SECRETKEYBYTES-1], puts
+    the length of the signed message into smlen and puts the signed message into
+    sm[0], sm[1], ..., sm[smlen-1]. It then returns 0.
+
+    The maximum possible length smlen is mlen+Ed25519.ValueBytes. The caller must
+    allocate at least mlen+Ed25519.ValueBytes bytes for sm.
+  */
+  pure nothrow @safe @nogc
+  static bool sign(ubyte[] sm, out size_t smlen, const ubyte[] m,
+      ref const SecretKey sk)
+  in {
+    assert( sm.length >= m.length + Bytes );
+  }
+  body {
+    size_t n = m.length;
+    Hash.Value d,h,r;
+    long[64] x;
+    gf p[4];
+
+    Hash.hash(d, sk[0..32]);
+    d[0] &= 248;
+    d[31] &= 127;
+    d[31] |= 64;
+
+    smlen = n+64;
+    foreach(i;0..n) sm[64 + i] = m[i];
+    foreach(i;0..32) sm[32 + i] = d[32 + i];
+
+    Hash.hash(r, sm[32..32+n+32]); //, n+32);
+    reduce(r);
+    scalarbase(p,r[0..32]);
+    pack(sm[0..32],p);
+
+    foreach(i;0..32) sm[i+32] = sk[i+32];
+    Hash.hash(h,sm[0..n+64]);
+    reduce(h);
+
+    foreach(i;0..64) x[i] = 0;
+    foreach(i;0..32) x[i] = ulong(r[i]);
+    foreach(i;0..32) foreach(j;0..32) x[i+j] += h[i] * ulong(d[j]);
+    modL(sm[32..64],x);
+
+    return true;
+  }
+
+  /**
+    The crypto_sign_open function verifies the signature in sm[0], ..., sm[smlen-1]
+    using the signer's public key pk[0], pk[1], ...,
+    pk[crypto_sign_PUBLICKEYBYTES-1]. The crypto_sign_open function puts the length
+    of the message into mlen and puts the message into m[0], m[1], ..., m[mlen-1].
+    It then returns true.
+
+    The maximum possible length mlen is smlen. The caller must allocate at least
+    smlen bytes for m.
+
+    If the signature fails verification, crypto_sign_open instead returns false,
+    possibly after modifying m[0], m[1], etc.
+
+     */
+  pure nothrow @safe @nogc
+  static bool signOpen(ubyte[] m, ref size_t mlen, const ubyte[] sm,
+      ref const PublicKey pk)
+  in {
+    assert( m.length >= sm.length );
+  }
+  body {
+    size_t n = sm.length;
+    ubyte[32] t;
+    Hash.Value h;
+    gf[4] p,q;
+
+    mlen = -1;
+    if (n < 64) return false;
+
+    if (!unpackneg(q,pk[0..32])) return false;
+
+    foreach(i;0..n) m[i] = sm[i];
+    foreach(i;0..32) m[i+32] = pk[i];
+    Hash.hash(h,m[0..n]);
+    reduce(h);
+    scalarmult(p,q,h[0..32]);
+
+    scalarbase(q,sm[32..64]);
+    add(p,q);
+    pack(t,p);
+
+    n -= 64;
+    if (crypto_verify_32(sm[0..32], t)) {
+      foreach(i;0..n) m[i] = 0;
+      return false;
+    }
+
+    foreach(i;0..n) m[i] = sm[i + 64];
+    mlen = n;
+    return true;
+  }
+
 }
+
+
+alias crypto_sign_keypair = Ed25519.keypair;
+alias crypto_sign = Ed25519.sign;
+alias crypto_sign_open = Ed25519.signOpen;
 
 private:
 

@@ -33,7 +33,6 @@
 */
 module tweednacl.xsalsa20;
 
-import tweednacl.basics : sigma;
 import tweednacl.salsa20 : Salsa20, HSalsa20;
 
 struct XSalsa20 {
@@ -42,56 +41,57 @@ struct XSalsa20 {
   enum Implementation = "crypto_stream/xsalsa20/tweet";
   enum Version = "-";
 
-  enum KeyBytes = 32;
-  enum NonceBytes = 24;
+  alias Key = ubyte[32];
+  alias Nonce = ubyte[24];
 
-  alias stream = crypto_stream;
-  alias streamXor = crypto_stream_xor;
+  /**
+    The crypto_stream function produces a stream c[0], c[1], ..., c[clen-1] as a
+    function of a secret key k[0], k[1], ..., k[XSalsa20.KeyBytes-1] and a
+    nonce n[0], n[1], ..., n[XSalsa20.NonceBytes-1]. The crypto_stream
+    function then returns 0.
+  */
+  pure nothrow @safe @nogc
+  static int stream(ubyte[] c,size_t d,
+      ref const Nonce nonce,
+      ref const Key k)
+  {
+    import tweednacl.basics : sigma;
+    ubyte s[32];
+    HSalsa20.core(s,nonce[0..HSalsa20InputBytes],k,sigma);
+    return crypto_stream_salsa20(c,d,nonce[HSalsa20InputBytes..$],s);
+  }
 
-  alias Key = ubyte[KeyBytes];
-  alias Nonce = ubyte[NonceBytes];
-}
-/**
+  /**
+    The crypto_stream_xor function encrypts a message m[0], m[1], ..., m[mlen-1]
+    using a secret key k[0], k[1], ..., k[XSalsa20.KeyBytes-1] and a nonce
+    n[0], n[1], ..., n[XSalsa20.NonceBytes-1]. The crypto_stream_xor function
+    puts the ciphertext into c[0], c[1], ..., c[mlen-1]. It then returns 0.
 
-  The crypto_stream function produces a stream c[0], c[1], ..., c[clen-1] as a
-  function of a secret key k[0], k[1], ..., k[XSalsa20.KeyBytes-1] and a
-  nonce n[0], n[1], ..., n[XSalsa20.NonceBytes-1]. The crypto_stream
-  function then returns 0.
-
-*/
-pure nothrow @safe @nogc int crypto_stream(ubyte[] c,size_t d,
-    ref const XSalsa20.Nonce nonce,
-    ref const XSalsa20.Key k)
-{
-  ubyte s[32];
-  HSalsa20.core(s,nonce[0..HSalsa20.InputBytes],k,sigma);
-  return crypto_stream_salsa20(c,d,nonce[HSalsa20.InputBytes..$],s);
-}
-
-/**
-
-  The crypto_stream_xor function encrypts a message m[0], m[1], ..., m[mlen-1]
-  using a secret key k[0], k[1], ..., k[XSalsa20.KeyBytes-1] and a nonce
-  n[0], n[1], ..., n[XSalsa20.NonceBytes-1]. The crypto_stream_xor function
-  puts the ciphertext into c[0], c[1], ..., c[mlen-1]. It then returns 0.
-
-  The crypto_stream_xor function guarantees that the ciphertext is the plaintext
-  xor the output of crypto_stream. Consequently crypto_stream_xor can also be
-  used to decrypt.
-
-*/
-pure nothrow @safe @nogc int crypto_stream_xor(ubyte[] c,const(ubyte)[] m,size_t d,
-    ref const XSalsa20.Nonce nonce,
-    ref const XSalsa20.Key k)
-{
-  import tweednacl.basics : sigma;
-  ubyte s[32];
-  HSalsa20.core(s,nonce[0..HSalsa20.InputBytes],k,sigma);
-  return crypto_stream_salsa20_xor(c,m,d,nonce[HSalsa20.InputBytes..$],s);
+    The crypto_stream_xor function guarantees that the ciphertext is the plaintext
+    xor the output of crypto_stream. Consequently crypto_stream_xor can also be
+    used to decrypt.
+  */
+  pure nothrow @safe @nogc
+  static int streamXor(ubyte[] c,const(ubyte)[] m,size_t d,
+      ref const Nonce nonce,
+      ref const Key k)
+  {
+    import tweednacl.basics : sigma;
+    ubyte s[32];
+    HSalsa20.core(s,nonce[0..HSalsa20InputBytes],k,sigma);
+    return crypto_stream_salsa20_xor(c,m,d,nonce[HSalsa20InputBytes..$],s);
+  }
 }
 
+alias crypto_stream = XSalsa20.stream;
+alias crypto_stream_xor = XSalsa20.streamXor;
 
 private:
+
+enum HSalsa20InputBytes = HSalsa20.Input.length;
+
+
+
 // Implementations for crypto_stream_salsa20
 // -----------------------------------------
 // the nonce bytes

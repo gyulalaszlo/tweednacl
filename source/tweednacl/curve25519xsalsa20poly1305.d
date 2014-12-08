@@ -59,14 +59,6 @@ struct Curve25519XSalsa20Poly1305 {
       "curve25519xsalsa20poly1305",
       "crypto_box/curve25519xsalsa20poly1305/tweet");
 
-  alias keypair = crypto_box_keypair;
-
-  alias box = crypto_box;
-  alias boxOpen = crypto_box_open;
-
-  alias beforenm = crypto_box_beforenm;
-  alias afternm = crypto_box_afternm;
-  alias openAfternm = crypto_box_open_afternm;
 
   /** The number of 0 bytes in front of the plaintext */
   enum ZeroBytes = 32;
@@ -77,32 +69,28 @@ struct Curve25519XSalsa20Poly1305 {
   alias SecretKey = ubyte[32];
   alias Nonce = ubyte[24];
   alias Beforenm = ubyte[32];
-}
 
-private alias CXSP = Curve25519XSalsa20Poly1305;
+  /**
 
-/**
+    The crypto_box_keypair function randomly generates a secret key and a
+    corresponding public key. It puts the secret key into sk[0], sk[1], ...,
+    sk[crypto_box_SECRETKEYBYTES-1] and puts the public key into pk[0], pk[1], ...,
+    pk[crypto_box_PUBLICKEYBYTES-1]. It then returns 0.
 
-  The crypto_box_keypair function randomly generates a secret key and a
-  corresponding public key. It puts the secret key into sk[0], sk[1], ...,
-  sk[crypto_box_SECRETKEYBYTES-1] and puts the public key into pk[0], pk[1], ...,
-  pk[crypto_box_PUBLICKEYBYTES-1]. It then returns 0.
+  Params:
+    safeRnd = a cryptographically safe random number generator like safeRandomBytes(ubyte[], size_t n)
+    pk = the output for the public key
+    sk = the output for the secret key
+    */
+  static int keypair(alias safeRnd)(
+      ref PublicKey pk,
+      ref SecretKey sk)
+  {
+    safeRnd(sk,32);
+    return Curve25519.scalarmultBase(pk,sk);
+  }
 
-Params:
-  safeRnd = a cryptographically safe random number generator like safeRandomBytes(ubyte[], size_t n)
-  pk = the output for the public key
-  sk = the output for the secret key
-  */
-int crypto_box_keypair(alias safeRnd)(
-    ref CXSP.PublicKey pk,
-    ref CXSP.SecretKey sk)
-{
-  safeRnd(sk,32);
-  return Curve25519.scalarmultBase(pk,sk);
-}
-
-
-/**
+  /**
 
   The crypto_box function encrypts and authenticates a message m[0], ...,
   m[mlen-1] using the sender's secret key sk[0], sk[1], ...,
@@ -118,22 +106,22 @@ int crypto_box_keypair(alias safeRnd)(
   bytes of the message; note, however, that mlen counts all of the bytes,
   including the bytes required to be 0.
   */
-pure nothrow @safe @nogc
-bool crypto_box(
-    ubyte[] cypherText,const ubyte[] m,
-    ref const CXSP.Nonce nonce,
-    ref const CXSP.PublicKey recvPk,
-    ref const CXSP.SecretKey senderSk)
-in {
-  assert( m.length >= CXSP.ZeroBytes );
-  assert( cypherText.length >= m.length );
-  foreach(i;0..CXSP.ZeroBytes) assert( m[i] == 0 );
-}
-body {
-  ubyte k[32];
-  crypto_box_beforenm(k,recvPk,senderSk);
-  return crypto_box_afternm(cypherText,m,nonce,k);
-}
+  static pure nothrow @safe @nogc
+  bool box(
+      ubyte[] cypherText,const ubyte[] m,
+      ref const Nonce nonce,
+      ref const PublicKey recvPk,
+      ref const SecretKey senderSk)
+  in {
+    assert( m.length >= ZeroBytes );
+    assert( cypherText.length >= m.length );
+    foreach(i;0..ZeroBytes) assert( m[i] == 0 );
+  }
+  body {
+    ubyte k[32];
+    crypto_box_beforenm(k,recvPk,senderSk);
+    return crypto_box_afternm(cypherText,m,nonce,k);
+  }
 
 /**
 
@@ -153,78 +141,94 @@ body {
   crypto_box_ZEROBYTES bytes of the plaintext m are all 0.
 
   */
-pure nothrow @safe @nogc
-bool crypto_box_open(
-    ubyte[] m,const ubyte[] cypherText,
-    ref const CXSP.Nonce nonce,
-    ref const CXSP.PublicKey senderPk,
-    ref const CXSP.SecretKey recvSk)
-in {
-  assert( cypherText.length >= CXSP.BoxZeroBytes);
-  assert( m.length >= cypherText.length );
-  foreach(i;0..CXSP.BoxZeroBytes)
-    assert( cypherText[i] == 0 );
-}
-body {
-  ubyte k[32];
-  crypto_box_beforenm(k,senderPk,recvSk);
-  return crypto_box_open_afternm(m,cypherText,nonce,k);
-}
-/**
+  pure nothrow @safe @nogc
+  static bool boxOpen(
+      ubyte[] m,const ubyte[] cypherText,
+      ref const Nonce nonce,
+      ref const PublicKey senderPk,
+      ref const SecretKey recvSk)
+  in {
+    assert( cypherText.length >= BoxZeroBytes);
+    assert( m.length >= cypherText.length );
+    foreach(i;0..BoxZeroBytes)
+      assert( cypherText[i] == 0 );
+  }
+  body {
+    ubyte k[32];
+    crypto_box_beforenm(k,senderPk,recvSk);
+    return crypto_box_open_afternm(m,cypherText,nonce,k);
+  }
 
-  $(BIG Precomputation interface)
 
-  Applications that send several messages to the same receiver can gain speed
-  by splitting crypto_box into two steps, crypto_box_beforenm and
-  crypto_box_afternm. Similarly, applications that receive several messages
-  from the same sender can gain speed by splitting crypto_box_open into two
-  steps, crypto_box_beforenm and crypto_box_open_afternm.
+  /**
 
-  The intermediate data computed by crypto_box_beforenm is suitable for both
-  crypto_box_afternm and crypto_box_open_afternm, and can be reused for any
-  number of messages.
-  */
-pure nothrow @safe @nogc
-int crypto_box_beforenm(
-    ref CXSP.Beforenm k,
-    ref const CXSP.PublicKey pk,
-    ref const CXSP.SecretKey sk)
-{
-  import tweednacl.salsa20;
-  ubyte s[32];
-  Curve25519.scalarmult(s,sk,pk);
-  return HSalsa20.core(k,_0,s,sigma);
+    $(BIG Precomputation interface)
+
+    Applications that send several messages to the same receiver can gain speed
+    by splitting crypto_box into two steps, crypto_box_beforenm and
+    crypto_box_afternm. Similarly, applications that receive several messages
+    from the same sender can gain speed by splitting crypto_box_open into two
+    steps, crypto_box_beforenm and crypto_box_open_afternm.
+
+    The intermediate data computed by crypto_box_beforenm is suitable for both
+    crypto_box_afternm and crypto_box_open_afternm, and can be reused for any
+    number of messages.
+    */
+  pure nothrow @safe @nogc
+  static int beforenm(
+      ref Beforenm k,
+      ref const PublicKey pk,
+      ref const SecretKey sk)
+  {
+    import tweednacl.salsa20;
+    ubyte s[32];
+    Curve25519.scalarmult(s,sk,pk);
+    return HSalsa20.core(k,_0,s,sigma);
+  }
+
+
+  /** ditto */
+  pure nothrow @safe @nogc
+  static bool afternm(
+      ubyte[] cypherText, const ubyte[] m,
+      ref const Nonce nonce,
+      ref const Beforenm k)
+  in {
+    assert( m.length >= ZeroBytes );
+    assert( cypherText.length >= m.length );
+    foreach(i;0..ZeroBytes) assert( m[i] == 0 );
+  }
+  body {
+    return XSalsa20Poly1305.secretbox(cypherText,m,nonce,k);
+  }
+
+  /** ditto */
+  pure nothrow @safe @nogc
+  static bool openAfternm(
+      ubyte[] m, const ubyte[] cypherText,
+      ref const Nonce nonce,
+      ref const Beforenm k)
+  in {
+    foreach(i;0..BoxZeroBytes)
+      assert( cypherText[i] == 0 );
+  }
+  body {
+    return XSalsa20Poly1305.secretboxOpen(m,cypherText,nonce,k);
+  }
+
 }
 
-/** ditto */
-pure nothrow @safe @nogc
-bool crypto_box_afternm(
-    ubyte[] cypherText, const ubyte[] m,
-    ref const CXSP.Nonce nonce,
-    ref const CXSP.Beforenm k)
-in {
-  assert( m.length >= CXSP.ZeroBytes );
-  assert( cypherText.length >= m.length );
-  foreach(i;0..CXSP.ZeroBytes) assert( m[i] == 0 );
-}
-body {
-  return XSalsa20Poly1305.secretbox(cypherText,m,nonce,k);
-}
 
-/** ditto */
-pure nothrow @safe @nogc
-bool crypto_box_open_afternm(
-    ubyte[] m, const ubyte[] cypherText,
-    ref const CXSP.Nonce nonce,
-    ref const CXSP.Beforenm k)
-in {
-  foreach(i;0..CXSP.BoxZeroBytes)
-    assert( cypherText[i] == 0 );
-}
-body {
-  return XSalsa20Poly1305.secretboxOpen(m,cypherText,nonce,k);
-}
+alias crypto_box_keypair = Curve25519XSalsa20Poly1305.keypair;
+alias crypto_box = Curve25519XSalsa20Poly1305.box;
+alias crypto_box_open = Curve25519XSalsa20Poly1305.boxOpen;
 
+alias crypto_box_beforenm = Curve25519XSalsa20Poly1305.beforenm;
+alias crypto_box_afternm = Curve25519XSalsa20Poly1305.afternm;
+alias crypto_box_open_afternm = Curve25519XSalsa20Poly1305.openAfternm;
+
+private:
+alias CXSP = Curve25519XSalsa20Poly1305;
 
 unittest {
 

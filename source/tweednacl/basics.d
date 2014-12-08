@@ -44,6 +44,78 @@ body {
   return (cast(const(ubyte)*)(&input[0]))[0..(input.length*T.sizeof)];
 }
 
+pure nothrow @trusted @nogc const(ubyte)[] toBytes(T)(const T* input)
+in {
+  assert( input != null );
+}
+body {
+  return (cast(ubyte*)(input))[0..T.sizeof];
+}
+/**
+  Converts a list of bytes to a struct pointer.
+*/
+pure nothrow @trusted @nogc auto fromBytes(T)(const ubyte[] b)
+{
+  return fromBytesImpl!(const T)( b );
+}
+
+/** ditto */
+pure nothrow @trusted @nogc auto fromBytes(T)(ubyte[] b)
+{
+  return fromBytesImpl!(T)( b );
+}
+
+private pure nothrow @trusted @nogc auto ref fromBytesImpl(T, E)(E b)
+in {
+  assert( b.length == T.sizeof );
+}
+body {
+  if (b.length != T.sizeof) return null;
+  return cast(T*)(&b[0]);
+}
+
+/**
+  Pads a message with zero bytes in a new buffer
+  */
+pure @safe ubyte[] zeroPadded( size_t padAmt, const ubyte[] input )
+{
+  ubyte[] buf;
+  buf.length = padAmt + input.length;
+  buf[padAmt..$]= input;
+  return buf;
+}
+
+/**
+  Returns an empty buffer with padAmt + input bytes.
+  */
+pure @safe ubyte[] zeroOut( size_t padAmt, const ubyte[] input )
+{
+  ubyte[] buf;
+  buf.length = padAmt + input.length;
+  return buf;
+}
+
+/**
+  Returns an empty buffer with input bytes.
+  */
+pure @safe ubyte[] zeroOut( const ubyte[] input )
+{
+  ubyte[] buf;
+  buf.length = input.length;
+  return buf;
+}
+
+
+/**
+  Returns an empty buffer with input bytes.
+  */
+pure @safe ubyte[] zeroOut( immutable size_t l )
+{
+  ubyte[] buf;
+  buf.length = l;
+  return buf;
+}
+
 
 package:
 
@@ -171,103 +243,126 @@ version(unittest) {
 
 }
 
-version(OSX) {
-  /**
-  Cryptographically secure random bytes on OSX are sourced from /dev/random
-  as suggested by Apple.
-  */
-  public @system void safeRandomBytes( ubyte[] output, size_t count)
-  {
-    import core.stdc.stdio;
-    import std.exception;
-    FILE* fp = enforce(fopen("/dev/random", "r"));
-    scope(exit) fclose(fp);
-    foreach(i;0..count) {
-      output[i] = cast(ubyte)(fgetc(fp));
-    }
-  }
-} else version(Windows) {
-  import core.sys.windows.windows;
-  alias HCRYPTPROV = ULONG_PTR;
-  extern (C) BOOL CryptGenRandom( HCRYPTPROV hProv, DWORD dwLen, BYTE *pbBuffer );
-  extern (C) BOOL CryptAcquireContext (
-                                  HCRYPTPROV *phProv,
-                                  LPCTSTR pszContainer,
-                                  LPCTSTR pszProvider,
-                                  DWORD dwProvType,
-                                  DWORD dwFlags
-                                  );
-  extern (C) BOOL CryptReleaseContext(HCRYPTPROV,DWORD);
+/** A fast, unsafe random function. */
+public @system void unSafeRandomBytes( ubyte[] output)
+{
+  unSafeRandomBytes(output, output.length);
+}
 
-  enum PROV_RSA_FULL = 1;
-  enum CRYPT_NEWKEYSET = 8;
+/** ditto */
+public @system void unSafeRandomBytes( ubyte[] output, size_t count)
+{
+  import std.random;
+  foreach (i;0..count) output[i] = uniform(ubyte.min, ubyte.max);
+}
 
-  class WindowsRandomError : Exception
+version(unittest) {
+  // A fast, unsafe random function for unittesting.
+  alias safeRandomBytes = unSafeRandomBytes;
+} else {
+
+  /** Shortcut for calling safeRandomBytes */
+  void safeRandomBytes( ubyte[] output )
   {
-    this() { super("Error during secure random number generation"); }
+    safeRandomBytes( output, output.length );
   }
 
-  // "Keyset does not exist"
-  enum NTE_BAD_KEYSET = -2146893802;
-
-  auto makeSecureRandomSequence()
-  {
-    // from: http://stackoverflow.com/questions/21420219/how-to-get-cryptographically-strong-random-bytes-with-windows-apis
-    // ---
-    // " a simple little class that tries to get an RSA Crytographic "provider",
-    // and if that fails it tries to create one. Then if all is well, generate
-    // will fill your buffer with love. Uhm... I mean random bytes."
-    struct RandomSequence
+  version(OSX) {
+    /**
+      Cryptographically secure random bytes on OSX are sourced from /dev/random
+      as suggested by Apple.
+     */
+    public @system void safeRandomBytes( ubyte[] output, size_t count)
     {
-      ~this() {
-        if (hProvider == 0) CryptReleaseContext(hProvider, 0U);
+      import core.stdc.stdio;
+      import std.exception;
+      FILE* fp = enforce(fopen("/dev/random", "r"));
+      scope(exit) fclose(fp);
+      foreach(i;0..count) {
+        output[i] = cast(ubyte)(fgetc(fp));
       }
+    }
 
-      BOOL generate(BYTE* buf, DWORD len) {
-        if (hProvider == 0) {
-          return CryptGenRandom(hProvider, len, buf);
-        }
-        throw new WindowsRandomError();
-      }
-    private:
-      HCRYPTPROV hProvider;
-      void initialize()
+  } else version(Windows) {
+
+    import core.sys.windows.windows;
+    alias HCRYPTPROV = ULONG_PTR;
+    extern (C) BOOL CryptGenRandom( HCRYPTPROV hProv, DWORD dwLen, BYTE *pbBuffer );
+      extern (C) BOOL CryptAcquireContext (
+          HCRYPTPROV *phProv,
+          LPCTSTR pszContainer,
+          LPCTSTR pszProvider,
+          DWORD dwProvType,
+          DWORD dwFlags
+          );
+    extern (C) BOOL CryptReleaseContext(HCRYPTPROV,DWORD);
+
+    enum PROV_RSA_FULL = 1;
+    enum CRYPT_NEWKEYSET = 8;
+
+    class WindowsRandomError : Exception
+    {
+      this() { super("Error during secure random number generation"); }
+    }
+
+    // "Keyset does not exist"
+    enum NTE_BAD_KEYSET = -2146893802;
+
+    auto makeSecureRandomSequence()
+    {
+      // from: http://stackoverflow.com/questions/21420219/how-to-get-cryptographically-strong-random-bytes-with-windows-apis
+      // ---
+      // " a simple little class that tries to get an RSA Crytographic "provider",
+      // and if that fails it tries to create one. Then if all is well, generate
+      // will fill your buffer with love. Uhm... I mean random bytes."
+      struct RandomSequence
       {
-        hProvider = 0;
-        if (FALSE == CryptAcquireContext(&hProvider, null, null, PROV_RSA_FULL, 0)) {
-          // failed, should we try to create a default provider?
-          if (NTE_BAD_KEYSET == GetLastError()) {
-            if (FALSE == CryptAcquireContext(&hProvider, null, null, PROV_RSA_FULL, CRYPT_NEWKEYSET)) {
-              // ensure the provider is NULL so we could use a backup plan
-              hProvider = 0;
+        ~this() {
+          if (hProvider == 0) CryptReleaseContext(hProvider, 0U);
+        }
+
+        BOOL generate(BYTE* buf, DWORD len) {
+          if (hProvider == 0) {
+            return CryptGenRandom(hProvider, len, buf);
+          }
+          throw new WindowsRandomError();
+        }
+        private:
+        HCRYPTPROV hProvider;
+        void initialize()
+        {
+          hProvider = 0;
+          if (FALSE == CryptAcquireContext(&hProvider, null, null, PROV_RSA_FULL, 0)) {
+            // failed, should we try to create a default provider?
+            if (NTE_BAD_KEYSET == GetLastError()) {
+              if (FALSE == CryptAcquireContext(&hProvider, null, null, PROV_RSA_FULL, CRYPT_NEWKEYSET)) {
+                // ensure the provider is NULL so we could use a backup plan
+                hProvider = 0;
+              }
             }
           }
         }
       }
+
+      auto o = RandomSequence();
+      o.initialize();
+      return o;
     }
 
-    auto o = RandomSequence();
-    o.initialize();
-    return o;
+    /**
+      Cryptographically secure random bytes on OSX are sourced from /dev/random
+      as suggested by Apple.
+
+Throws: WindowsRandomError if not successful
+     */
+    public @system void safeRandomBytes( ubyte[] output, size_t count)
+    {
+      // TODO: do this on a thread-local storage space
+      auto s = makeSecureRandomSequence();
+      s.generate(&output[0], cast(DWORD)(count));
+    }
+
+  }else {
+    static assert( false, "void safeRandomBytes( ubyte[] output, size_t count) not implemented" );
   }
-
-  /**
-  Cryptographically secure random bytes on OSX are sourced from /dev/random
-  as suggested by Apple.
-
-  Throws: WindowsRandomError if not successful
-  */
-  public @system void safeRandomBytes( ubyte[] output, size_t count)
-  {
-    // TODO: do this on a thread-local storage space
-    auto s = makeSecureRandomSequence();
-    s.generate(&output[0], cast(DWORD)(count));
-  }
-
-}else {
-  static assert( false, "void safeRandomBytes( ubyte[] output, size_t count) not implemented" );
-}
-
-version(Windows) {
-
 }

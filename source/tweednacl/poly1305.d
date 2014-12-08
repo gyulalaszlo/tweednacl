@@ -20,112 +20,107 @@
 module tweednacl.poly1305;
 
 import tweednacl.basics;
-import tweednacl.nacl;
 
 
 struct Poly1305 {
-  enum Primitive = CryptoPrimitive( "poly1305",
-      "crypto_onetimeauth/poly1305/tweet",
-      );
-  //enum Primitive = "poly1305";
-  //enum Version = "-";
-  //enum Implementation = "crypto_onetimeauth/poly1305/tweet";
-
-  //enum Bytes = 16;
-  //enum KeyBytes = 32;
-
-  alias onetimeauth = crypto_onetimeauth;
-  alias onetimeauthVerify = crypto_onetimeauth_verify;
+  enum Primitive = "poly1305";
+  enum Version = "-";
+  enum Implementation = "crypto_onetimeauth/poly1305/tweet";
 
   alias Value = ubyte[16];
   alias Key = ubyte[32];
-}
-/**
 
-  The crypto_onetimeauth function authenticates a message m[0], m[1], ...,
-  m[mlen-1] using a secret key k[0], k[1], ..., k[crypto_onetimeauth_KEYBYTES-1];
-  puts the authenticator into a[0], a[1], ..., a[crypto_onetimeauth_BYTES-1]; and
-  returns 0.
-*/
-pure nothrow @safe @nogc
-int crypto_onetimeauth(
-    ref Poly1305.Value output,
-    const(ubyte)[] m,
-    ref const Poly1305.Key k)
-{
-  uint s,u;
-  uint[17] x,r,h,c,g;
+  /**
 
-  foreach(j;0..17) r[j]=h[j]=0;
-  foreach(j;0..16) r[j]=k[j];
-  r[3]&=15;
-  r[4]&=252;
-  r[7]&=15;
-  r[8]&=252;
-  r[11]&=15;
-  r[12]&=252;
-  r[15]&=15;
+    The crypto_onetimeauth function authenticates a message m[0], m[1], ...,
+    m[mlen-1] using a secret key k[0], k[1], ..., k[crypto_onetimeauth_KEYBYTES-1];
+    puts the authenticator into a[0], a[1], ..., a[crypto_onetimeauth_BYTES-1]; and
+    returns 0.
+  */
+  pure nothrow @safe @nogc
+  static int onetimeauth(
+      ref Value output,
+      const(ubyte)[] m,
+      ref const Key k)
+  {
+    uint s,u;
+    uint[17] x,r,h,c,g;
 
-  size_t n = m.length;
+    foreach(j;0..17) r[j]=h[j]=0;
+    foreach(j;0..16) r[j]=k[j];
+    r[3]&=15;
+    r[4]&=252;
+    r[7]&=15;
+    r[8]&=252;
+    r[11]&=15;
+    r[12]&=252;
+    r[15]&=15;
 
-  while (n > 0) {
-    foreach(j;0..17) { c[j] = 0; }
-    uint jj;
-    for (jj = 0;(jj < 16) && (jj < n);++jj) c[jj] = m[jj];
-    c[jj] = 1;
-    m = m[jj..$]; n -= jj;
+    size_t n = m.length;
+
+    while (n > 0) {
+      foreach(j;0..17) { c[j] = 0; }
+      uint jj;
+      for (jj = 0;(jj < 16) && (jj < n);++jj) c[jj] = m[jj];
+      c[jj] = 1;
+      m = m[jj..$]; n -= jj;
+      add1305(h,c);
+      foreach(i;0..17) {
+        x[i] = 0;
+        foreach(j;0..17) x[i] += h[j] * ((j <= i) ? r[i - j] : 320 * r[i + 17 - j]);
+      }
+      foreach(i;0..17) h[i] = x[i];
+      u = 0;
+      foreach(j;0..16) {
+        u += h[j];
+        h[j] = u & 255;
+        u >>= 8;
+      }
+      u += h[16]; h[16] = u & 3;
+      u = 5 * (u >> 2);
+      foreach(j;0..16) {
+        u += h[j];
+        h[j] = u & 255;
+        u >>= 8;
+      }
+      u += h[16]; h[16] = u;
+    }
+
+    foreach(j;0..17) g[j] = h[j];
+    add1305(h,minusp);
+    s = -(h[16] >> 7);
+    foreach(j;0..17) h[j] ^= s & (g[j] ^ h[j]);
+
+    foreach(j;0..16) c[j] = k[j + 16];
+    c[16] = 0;
     add1305(h,c);
-    foreach(i;0..17) {
-      x[i] = 0;
-      foreach(j;0..17) x[i] += h[j] * ((j <= i) ? r[i - j] : 320 * r[i + 17 - j]);
-    }
-    foreach(i;0..17) h[i] = x[i];
-    u = 0;
-    foreach(j;0..16) {
-      u += h[j];
-      h[j] = u & 255;
-      u >>= 8;
-    }
-    u += h[16]; h[16] = u & 3;
-    u = 5 * (u >> 2);
-    foreach(j;0..16) {
-      u += h[j];
-      h[j] = u & 255;
-      u >>= 8;
-    }
-    u += h[16]; h[16] = u;
+    foreach(j;0..16) output[j] = cast(ubyte)(h[j]);
+    return 0;
   }
 
-  foreach(j;0..17) g[j] = h[j];
-  add1305(h,minusp);
-  s = -(h[16] >> 7);
-  foreach(j;0..17) h[j] ^= s & (g[j] ^ h[j]);
+  /**
 
-  foreach(j;0..16) c[j] = k[j + 16];
-  c[16] = 0;
-  add1305(h,c);
-  foreach(j;0..16) output[j] = cast(ubyte)(h[j]);
-  return 0;
+    This function returns 0 if a[0], a[1], ..., a[crypto_onetimeauth_BYTES-1] is
+    a correct authenticator of a message m[0], m[1], ..., m[mlen-1] under a
+    secret key k[0], k[1], ..., k[crypto_onetimeauth_KEYBYTES-1]. Otherwise
+    crypto_onetimeauth_verify returns -1.
+
+  */
+  pure nothrow @safe @nogc
+  static bool onetimeauthVerify(
+      ref const Value h,
+      const ubyte[] m,
+      ref const Key k)
+  {
+    ubyte x[16];
+    crypto_onetimeauth(x,m,k);
+    return (crypto_verify_16(h,x) == 0);
+  }
+
 }
 
-/**
-
-  This function returns 0 if a[0], a[1], ..., a[crypto_onetimeauth_BYTES-1] is
-  a correct authenticator of a message m[0], m[1], ..., m[mlen-1] under a
-  secret key k[0], k[1], ..., k[crypto_onetimeauth_KEYBYTES-1]. Otherwise
-  crypto_onetimeauth_verify returns -1.
-
-*/
-pure nothrow @safe @nogc
-bool crypto_onetimeauth_verify(
-    ref const Poly1305.Value h,
-    const ubyte[] m,
-    ref const Poly1305.Key k)
-{
-  ubyte x[16];
-  crypto_onetimeauth(x,m,k);
-  return (crypto_verify_16(h,x) == 0);
-}
+alias crypto_onetimeauth = Poly1305.onetimeauth;
+alias crypto_onetimeauth_verify = Poly1305.onetimeauthVerify;
 
 private:
 

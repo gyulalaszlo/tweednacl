@@ -7,17 +7,22 @@ struct Salsa20 {
       "crypto_core/salsa20/tweet"
       );
 
-  enum OutputBytes = 64;
-  enum InputBytes = 16;
-  enum KeyBytes = 32;
-  enum ConstBytes = 16;
+  alias Output = ubyte[64];
+  alias Input = ubyte[16];
+  alias Key = ubyte[32];
+  alias Const = ubyte[16];
 
-  alias core = crypto_core_salsa20;
+  pure nothrow @safe @nogc
+  static int core(
+      ref Output output,
+      ref const Input input,
+      ref const Key k,
+      ref const Const c)
+  {
+    salsaCoreImpl!(UseHSalsa.No)(output,input,k,c);
+    return 0;
+  }
 
-  alias Output = ubyte[OutputBytes];
-  alias Input = ubyte[InputBytes];
-  alias Key = ubyte[KeyBytes];
-  alias Const = ubyte[ConstBytes];
 }
 
 struct HSalsa20 {
@@ -25,38 +30,27 @@ struct HSalsa20 {
       "crypto_core/hsalsa20/tweet"
       );
 
-  enum OutputBytes = 32;
-  enum InputBytes = 16;
-  enum KeyBytes = 32;
-  enum ConstBytes = 16;
+  alias Output = ubyte[32];
+  alias Input = ubyte[16];
+  alias Key = ubyte[32];
+  alias Const = ubyte[16];
 
-  alias core = crypto_core_hsalsa20;
+  pure nothrow @safe @nogc
+  static int core(
+      ref Output output,
+      ref const Input input,
+      ref const Key k,
+      ref const Const c)
+  {
+    salsaCoreImpl!(UseHSalsa.Yes)(output,input,k,c);
+    return 0;
+  }
 
-  alias Output = ubyte[OutputBytes];
-  alias Input = ubyte[InputBytes];
-  alias Key = ubyte[KeyBytes];
-  alias Const = ubyte[ConstBytes];
 }
 
-pure nothrow @safe @nogc int crypto_core_salsa20(
-    ref Salsa20.Output output,
-    ref const Salsa20.Input input,
-    ref const Salsa20.Key k,
-    ref const Salsa20.Const c)
-{
-  core!(UseHSalsa.No)(output,input,k,c);
-  return 0;
-}
 
-pure nothrow @safe @nogc int crypto_core_hsalsa20(
-    ref HSalsa20.Output output,
-    ref const HSalsa20.Input input,
-    ref const HSalsa20.Key k,
-    ref const HSalsa20.Const c)
-{
-  core!(UseHSalsa.Yes)(output,input,k,c);
-  return 0;
-}
+alias crypto_core_salsa20 = Salsa20.core;
+alias crypto_core_hsalsa20 = HSalsa20.core;
 
 private:
 
@@ -65,7 +59,7 @@ import tweednacl.basics : ld32, L32, st32;
 // Should the core use Salsa or HSalsa
 enum UseHSalsa {No, Yes};
 
-pure nothrow @safe @nogc void core(UseHSalsa useHSalsa)(
+pure nothrow @safe @nogc void salsaCoreImpl(UseHSalsa useHSalsa)(
     ubyte[] output,const ubyte[] input,const ubyte[] k,const ubyte[] c)
 {
   uint[16] w,x,y;
