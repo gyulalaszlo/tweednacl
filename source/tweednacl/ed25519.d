@@ -72,6 +72,12 @@ struct Ed25519
 
     The maximum possible length smlen is mlen+Ed25519.ValueBytes. The caller must
     allocate at least mlen+Ed25519.ValueBytes bytes for sm.
+
+    $(BIG In-place signing)
+
+    If you want to process the data in-place (just add the signature in front
+    allicate Ed25519.Bytes of space in front of the message and provide
+    buf[] and buf[E25519.Bytes..$] as $(D signedMessage) and $(D message).
   */
   pure nothrow @safe @nogc
   static bool sign(ubyte[] sm, out size_t smlen, const ubyte[] m,
@@ -81,6 +87,7 @@ struct Ed25519
   }
   body {
     size_t n = m.length;
+    const inOutSame = n > 0 && (&sm[64] == &m[0]);
     Hash.Value d,h,r;
     long[64] x;
     gf p[4];
@@ -91,7 +98,8 @@ struct Ed25519
     d[31] |= 64;
 
     smlen = n+64;
-    foreach(i;0..n) sm[64 + i] = m[i];
+    // if the buffers are the same
+    if (!inOutSame) sm[64..n+64] = m[0..n];
     foreach(i;0..32) sm[32 + i] = d[32 + i];
 
     Hash.hash(r, sm[32..32+n+32]); //, n+32);
@@ -124,6 +132,13 @@ struct Ed25519
     If the signature fails verification, crypto_sign_open instead returns false,
     possibly after modifying m[0], m[1], etc.
 
+
+    $(BIG In-place verification)
+
+    The $(D signOpenInPlace) method tries to open the signed message without
+    copying the signed message. When calling this method, the message will remain
+    in the [Ed25519.Bytes..$] range.
+
      */
   pure nothrow @safe @nogc
   static bool signOpen(ubyte[] m, ref size_t mlen, const ubyte[] sm,
@@ -133,6 +148,7 @@ struct Ed25519
   }
   body {
     size_t n = sm.length;
+    const inOutSame = n > 0 && (&m[0] == &sm[0]);
     ubyte[32] t;
     Hash.Value h;
     gf[4] p,q;
@@ -142,27 +158,40 @@ struct Ed25519
 
     if (!unpackneg(q,pk[0..32])) return false;
 
-    foreach(i;0..n) m[i] = sm[i];
+    // if the buffers are not the same copy
+    if (!inOutSame) m[0..n] = sm[0..n];
+
+    // NOTE: This has been changed from tweetnacl to support in-place
+    // signing.
+    // This will be needed later for the scalar multiplication.
+    const ubyte[32] sm32_64 = sm[32..64];
+
     foreach(i;0..32) m[i+32] = pk[i];
     Hash.hash(h,m[0..n]);
     reduce(h);
     scalarmult(p,q,h[0..32]);
 
-    scalarbase(q,sm[32..64]);
+    scalarbase(q,sm32_64);
     add(p,q);
     pack(t,p);
 
-    n -= 64;
-    if (crypto_verify_32(sm[0..32], t)) {
-      foreach(i;0..n) m[i] = 0;
+    //n -= 64;
+    if (crypto_verify_32(sm[0..32], t) != 0) {
+      m[0..n-64] = 0;
       return false;
     }
 
-    foreach(i;0..n) m[i] = sm[i + 64];
-    mlen = n;
+    if (!inOutSame) m[0..n-64] = sm[64..n];
+    mlen = n-64;
     return true;
   }
 
+  /** ditto */
+  pure nothrow @safe @nogc
+  static bool signOpenInPlace(ubyte[] m, ref size_t mlen, ref const PublicKey pk)
+  {
+    return signOpen(m, mlen, m, pk );
+  }
 }
 
 
@@ -317,7 +346,8 @@ pure nothrow @safe @nogc bool unpackneg(ref gf[4] r,ref const ubyte[32] p)
 }
 
 
-unittest {
+unittest
+{
 
 
   struct TestData {
@@ -463,7 +493,9 @@ unittest {
   sig[] = 0;
   import std.string;
   import std.digest.sha : toHexString;
-  for (i = 0U; i < test_data.length; i++) {
+  import std.random;
+  // since this test is slow, run only random parts of it
+  for (i = 0U; i < test_data.length; i+=uniform(1,5)) {
     skpk[0..Ed25519.SeedBytes] = test_data[i].sk[];
     skpk[Ed25519.SeedBytes..Ed25519.SeedBytes + Ed25519.PublicKey.length] =
       test_data[i].pk[0..Ed25519.PublicKey.length];
@@ -499,6 +531,8 @@ unittest {
 
 unittest
 {
+  enum testMessageLengthsUpTo = 12;
+
   import std.random;
 
   Ed25519.PublicKey pk;
@@ -540,3 +574,43 @@ unittest
   }
 }
 
+// Test the signatures for using the same memory buffer
+unittest
+{
+  enum testMessageLengthsUpTo = 12;
+
+  import std.random;
+    import std.stdio;
+    import tweednacl.encoded_bytes;
+
+  Ed25519.PublicKey pk;
+  Ed25519.SecretKey sk;
+  assert(crypto_sign_keypair!safeRandomBytes(pk, sk) );
+
+  enum maxLen = 2 << testMessageLengthsUpTo + 1;
+
+  size_t msgLen, signedMsgLen;
+  // generate a random message and test if it can be signed/opened
+  // with a keypair.
+  foreach(i;0..testMessageLengthsUpTo) {
+    const mlen = (2 << i) + i;
+    ubyte[] msgBuf;
+    msgBuf.length = mlen + Ed25519.Bytes;
+
+    const signedMLen = Ed25519.Bytes + mlen;
+    auto msg = msgBuf[Ed25519.Bytes..signedMLen];
+    auto signedMsg = msgBuf[0..signedMLen];
+    randomBuffer(msg[0..mlen]);
+
+    assert( Ed25519.sign( signedMsg, signedMsgLen, msg,  sk ));
+    assert( Ed25519.signOpenInPlace( signedMsg, msgLen, pk ));
+    assert( msgLen == mlen );
+
+    if (mlen == 0) continue;
+    foreach(j;0..3)
+    {
+      forgeBuffer( signedMsg, j+1 );
+      assert( !Ed25519.signOpenInPlace( signedMsg, msgLen,  pk ) );
+    }
+  }
+}

@@ -192,18 +192,6 @@ pure nothrow @safe @nogc int vn(const ubyte[] x,const ubyte[] y,int n)
 
 version(unittest) {
   import std.random;
-  /**
-  For unittests that try to forge sign/crypt/forge random messages
-  up to a given length  testMessageLengthsUpTo  is the maximum message
-  length in bytes.
-
-  For example specifying 64 here should try to forge message lengths
-  up to 0..64 bytes. Upping this number makes the tests take much
-  more time. The soundness of the encryption should make strong enough
-  guarantees that the message lengths checked here should be checking
-  for possible failts in the implementation.
-  */
-  enum testMessageLengthsUpTo = 16;
 
   /**
   Helper to generate a pseudo-random buffer.

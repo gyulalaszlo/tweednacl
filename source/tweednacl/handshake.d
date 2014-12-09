@@ -12,7 +12,7 @@ class HandshakeError : Exception {
   this(string msg) { super("Handshake error: " ~ msg); }
 }
 
-enum isHandshakeSigner(T) = 
+enum isHandshakeSigner(T) =
   __traits( hasMember, T, "sign" )
   && __traits( hasMember, T, "open" )
   && __traits( hasMember, T, "restart" )
@@ -73,53 +73,54 @@ template Handshake( Signer, Steps... )
   // code generator for the steps
   static string makeStep( string[string] opts )
   {
+    string input, inputName, output, outputName, methodBody;
+    string[] returnStr, prelude, args, stepCalls;
     const string stepName = opts["name"];
 
-    const hasInput = ("input" in opts) != null;
-    const hasOutput = ("output" in opts) != null;
-    const hasBody = ("body" in opts) != null;
-
-    string input, inputName, output, outputName, methodBody;
-    if (hasInput) { input = opts["input"]; inputName = opts["inputName"]; }
-    if (hasOutput) { output = opts["output"]; outputName = opts["outputName"]; }
-    if (hasBody) methodBody = opts["body"];
+    if (("body" in opts) != null) methodBody = opts["body"];
 
     methodBody ~= format("isDone = %s;", opts["done"]);
 
-    string[] returnStr;
-    string[] prelude;
-    string[] args;
 
-    debug(DebugHandshakeSteps)
-      prelude ~= "writefln(\"---- " ~ stepName ~ " ----\");";
+    if (("input" in opts) != null) {
+      input = opts["input"];
+      inputName = opts["inputName"];
 
-    if (hasInput) {
-      prelude ~= "auto openedMsg = signer.open!" ~ input ~ "( input );";
-      prelude ~= "if (openedMsg.length != " ~ input ~ ".sizeof)";
-      prelude ~= "  throw new HandshakeError(\"Invalid handshake input message length in " ~ stepName  ~ ".\");";
-      prelude ~= "auto inputMsg = " ~ "(cast(" ~ input ~ "*)(&openedMsg[0]));";
+      prelude ~= format( q"{
+          if (input.length != %s.sizeof + Signer.Bytes )
+            throw new HandshakeError("Invalid handshake message length in '%s'.");
 
-      debug(DebugHandshakeSteps)
-        prelude ~= "writefln(\"openedMsg = %s\", bytesToHex(openedMsg));";
+          auto inputBuf = inputBuffer[0..(%s.sizeof + Signer.Bytes)];
+          inputBuf[] = input[];
+          }",
+          input, stepName, input);
+
+      prelude ~= "signer.open( inputBuf );";
+      //prelude ~= "if (openedMsg.length != " ~ input ~ ".sizeof)";
+      //prelude ~= "  throw new HandshakeError(\"Invalid handshake input message length in " ~ stepName  ~ ".\");";
+      prelude ~= "auto inputMsg = " ~ "(cast(" ~ input ~ "*)(&inputBuf[Signer.Bytes]));";
 
       foreach(n;inputName.split(','))
-      {
         args ~= "inputMsg." ~ n;
-      }
     }
 
-    if (hasOutput) {
-      prelude ~= "ubyte[] msg = zeroOut(" ~ output ~ ".sizeof);";
-      prelude ~= "auto outputMsg = " ~ "(cast(" ~ output ~ "*)(&msg[0]));";
+    if (("output" in opts) != null)
+    {
+      output = opts["output"];
+      outputName = opts["outputName"];
+
+      prelude ~= format(q"{
+          immutable outLen = %s.sizeof+Signer.Bytes;
+          auto outBuf = outputBuffer[0..outLen];
+          outBuf[0..Signer.Bytes] = 0;
+          auto outputMsg = cast(%s*)(&outBuf[Signer.Bytes]);
+          }",
+          output, output);
+
       args ~= "outputMsg." ~ outputName;
 
-      debug(DebugHandshakeSteps)
-        returnStr ~= "writefln(\"output    = %s\", bytesToHex(msg));";
-
-      returnStr ~= "return signer.sign( msg );";
+      returnStr ~= format("return signer.sign( outBuf );" );
     }
-
-    string[] stepCalls;
 
     foreach(i;0..Steps.length)
     {
@@ -127,10 +128,7 @@ template Handshake( Signer, Steps... )
       stepCalls ~= format("steps[%s].%s( %s );", i, stepName, join(argList, ", "));
     }
 
-
-    return join( ["// ", join(prelude, "\n"),
-        join(stepCalls,"\n"),
-        //"steps." ~ stepName ~ "( " ~ join(args, ", ") ~ " );",
+    return join( ["// ", join(prelude, "\n"), join(stepCalls,"\n"),
         methodBody, join(returnStr, "\n") ], "\n");
   }
 
@@ -182,8 +180,10 @@ template Handshake( Signer, Steps... )
       Consensus consensus;
     }
 
-    enum BufferSize = ResponseMsg.sizeof > SyncMsg.sizeof ? ResponseMsg.sizeof : SyncMsg.sizeof;
-    ubyte buffer[BufferSize];
+    enum BufferSize = Signer.Bytes +
+      ((ResponseMsg.sizeof > SyncMsg.sizeof) ? ResponseMsg.sizeof : SyncMsg.sizeof);
+
+    ubyte[BufferSize] inputBuffer, outputBuffer;
 
     public:
     /**
@@ -222,8 +222,8 @@ template Handshake( Signer, Steps... )
       enum stepOptions = ["name":"sync", "done": "true",
                        "input":"ResponseMsg", "inputName": "challenge,response",
                        "output":"SyncMsg", "outputName":"consensus"];
-      debug(ShowHandshakeMacros)
-        pragma(msg, makeStep( stepOptions ));
+      //debug(ShowHandshakeMacros)
+        //pragma(msg, makeStep( stepOptions ));
       mixin(makeStep( stepOptions ));
     }
 
@@ -238,8 +238,7 @@ template Handshake( Signer, Steps... )
     void succeed( const ubyte[] input )
     {
       enum stepOptions = [ "name": "succeed", "done": "true",
-                       "input":"SyncMsg", "inputName":"consensus"
-                         ];
+                       "input":"SyncMsg", "inputName":"consensus" ];
       mixin(makeStep(stepOptions));
     }
 
@@ -250,13 +249,11 @@ template Handshake( Signer, Steps... )
 
 Throws: HandshakeError if exchange was unsuceesful or finished.
      */
-    auto open() {
-
+    auto open()
+    {
       if (!isDone)
         throw new HandshakeError("Tried to open a not yet completed handshake.");
 
-      debug(ShowHandshakeMacros)
-        pragma(msg, generateOpen(Steps.length));
       mixin(generateOpen(Steps.length));
     }
 
@@ -426,6 +423,7 @@ struct NonceHandshakeSteps(
 
 }
 
+
 /**
   Creates a handshake for exchanging nonces. See $(SEE NonceHandshakeSteps) 
 
@@ -445,10 +443,7 @@ auto nonceHandshake( Nonce,
 unittest
 {
   alias Nonce = ubyte[24];
-  testHandshake(
-      nonceHandshake!Nonce(), nonceHandshake!Nonce()
-      );
-
+  testHandshake( nonceHandshake!Nonce(), nonceHandshake!Nonce());
 }
 
 
@@ -487,7 +482,6 @@ unittest
       signedNonceHandshake!Nonce( bobPk, aliceSk ),
       signedNonceHandshake!Nonce( alicePk, bobSk )
       );
-
 }
 
 
@@ -770,9 +764,10 @@ struct NoSignature
   struct Data { RandomData challenge; RandomData response; } //RandomBlock!(RandomData, true);
 
   enum SignatureSize = 0;
+  enum Bytes = 0;
 
-  auto sign(E)(E m) { return m; }
-  auto open(N, E)(E m) { return m; }
+  auto sign(ubyte[] m) { return m; }
+  auto open(ubyte[] m) { return m; }
   void restart() {}
 
   void initRandom() {}
@@ -800,11 +795,13 @@ template HandshakeSigner(SignPrimitive, alias safeRnd=safeRandomBytes)
     alias RandomData = ubyte[8];
     alias Data = RandomBlock!(RandomData, true);
 
-    enum SignatureSize = SignPrimitive.Signature.length;
+    //enum SignatureSize = SignPrimitive.Signature.sizeof;
+    enum Bytes = SignPrimitive.Bytes + Data.sizeof;
 
     // Allow the initialization with keys.
     SignPrimitive.PublicKey otherPartyPublicKey;
     SignPrimitive.SecretKey mySecretKey;
+
 
 
     RandomData myRandom;
@@ -823,36 +820,38 @@ template HandshakeSigner(SignPrimitive, alias safeRnd=safeRandomBytes)
     /**
       Signs an outgoing message and adds the random bits.
      */
-    auto sign(E)(E i)
-    {
-      auto msgBuf = zeroPadded( Data.sizeof, i );
-      auto signedBuf = zeroOut( SignPrimitive.Bytes + Data.sizeof, i );
-
-      auto signRandomData = cast(Data*)(&msgBuf[0]);
+    auto sign(ubyte[] i)
+    in {
+      assert( i.length >= Bytes );
+    }
+    body {
+      auto signRandomData = cast(Data*)(&i[SignPrimitive.Bytes]);
       signRandomData.challenge = myRandom;
       signRandomData.response = otherRandom;
 
       size_t smlen;
-      SignPrimitive.sign( signedBuf, smlen, msgBuf, mySecretKey );
+      SignPrimitive.sign( i, smlen, i[64..$], mySecretKey );
 
-      return signedBuf[0..smlen];
+      return i[0..smlen];
     }
 
 
     /**
       Opens a signed message and checks the length, the randoms and the signature.
      */
-    auto open(E, T)(T m)
+    void open(ubyte[] m)
+    in {
+      assert( m.length >= Bytes );
+    }
+    body
     {
-      if (m.length != E.sizeof + Data.sizeof + SignPrimitive.Bytes )
-        throw new HandshakeError("Invalid handshake message length ");
-
-      auto o = zeroOut(m);
+      //auto o = zeroOut(m);
       size_t mlen;
-      if (!SignPrimitive.signOpen( o, mlen, m, otherPartyPublicKey ))
+      //if (!SignPrimitive.signOpenInPlace( o, mlen, m, otherPartyPublicKey ))
+      if (!SignPrimitive.signOpenInPlace( m, mlen, otherPartyPublicKey ))
         throw new HandshakeError("Handshake signature mismatch");
 
-      auto signRandomData = cast(Data*)(&o[0]);
+      auto signRandomData = cast(Data*)(&m[SignPrimitive.Bytes]);
       if (signRandomData.response != myRandom)
         throw new HandshakeError("Error in handshake");
 
@@ -862,7 +861,6 @@ template HandshakeSigner(SignPrimitive, alias safeRnd=safeRandomBytes)
         seenOtherRandom = true;
       }
 
-      return o[(Data.sizeof)..mlen];
     }
 
 
