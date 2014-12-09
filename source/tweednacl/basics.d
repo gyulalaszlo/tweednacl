@@ -216,12 +216,6 @@ version(unittest) {
   }
 
 
-  void forgeBuffer(T)( T[] m, size_t count )
-  {
-    foreach(i;0..count)
-      m[uniform(0,m.length)] = uniform(T.min, T.max);
-  }
-
   /** ditto */
   T[S] randomBuffer(size_t S, T=ubyte)()
   {
@@ -239,6 +233,13 @@ version(unittest) {
     randomBuffer(buffer);
     //foreach(ref e;buffer) e = uniform(T.min, T.max);
     return buffer;
+  }
+
+  /** Tries to forge $(D count) number of bytes in $(D m) */
+  void forgeBuffer(T)( T[] m, size_t count )
+  {
+    foreach(i;0..count)
+      m[uniform(0,m.length)] = uniform(T.min, T.max);
   }
 
 }

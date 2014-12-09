@@ -7,25 +7,10 @@
   $(BR)
   $(LINK https://www.youtube.com/watch?v=16FKOQ1gx68)
 
-
-$(BIG Expert selection of default primitives)
-
-Typical cryptographic libraries force the programmer to specify choices of
-cryptographic primitives: e.g., "sign this message with 4096-bit RSA using PKCS
-#1 v2.0 with SHA-256."
-
-Most programmers using cryptographic libraries are not expert cryptographic
-security evaluators. Often programmers pass the choice along to users—who
-usually have even less information about the security of cryptographic
-primitives. There is a long history of these programmers and users making poor
-choices of cryptographic primitives, such as MD5 and 512-bit RSA, years after
-cryptographers began issuing warnings about the security of those primitives.
-
-NaCl allows, and encourages, the programmer to simply say "sign this message."
-NaCl has a side mechanism through which a cryptographer can easily specify the
-choice of signature system. Furthermore, NaCl is shipped with a preselected
-choice, namely a state-of-the-art signature system suitable for worldwide use
-in a wide range of applications.
+$(UL
+  $(LI $(LINK2 nacl.html , Rationale / about to NaCl ))
+  $(LI $(LINK2 handshake.html , Handshakes ))
+  )
 
 $(BIG High-level primitives)
 
@@ -48,69 +33,22 @@ $(OL
 Sometimes even more steps are required for storage allocation, error handling,
 etc.
 
-NaCl provides a simple crypto_box function that does everything in one step.
-The function takes the sender's secret key, the recipient's public key, and a
-message, and produces an authenticated ciphertext. All objects are represented
-in wire format, as sequences of bytes suitable for transmission; the crypto_box
-function automatically handles all necessary conversions, initializations, etc.
+$(UL
+  NaCl provides a simple crypto_box function that does everything in one step.
+  The function takes the sender's secret key, the recipient's public key, and a
+  message, and produces an authenticated ciphertext. All objects are represented
+  in wire format, as sequences of bytes suitable for transmission; the crypto_box
+  function automatically handles all necessary conversions, initializations, etc.
 
-Another virtue of NaCl's high-level API is that it is not tied to the
-traditional hash-sign-encrypt-etc. hybrid structure. NaCl supports much faster
-message-boxing solutions that reuse Diffie-Hellman shared secrets for any
-number of messages between the same parties.
+  $(LI Another virtue of NaCl's high-level API is that it is not tied to the
+  traditional hash-sign-encrypt-etc. hybrid structure. NaCl supports much
+  faster message-boxing solutions that reuse Diffie-Hellman shared secrets for
+  any number of messages between the same parties.)
+)
 
-A multiple-step procedure can have important speed advantages when multiple
-computations share precomputations. NaCl allows users to split crypto_box into
-two steps, namely crypto_box_beforenm for message-independent precomputation
-and crypto_box_afternm for message-dependent computation.
+License:
+TweetNaCl is public domain, tweedNaCl is available under the Boost Public License.
 
-$(BIG No data-dependent branches)
-
-The CPU's instruction pointer, branch predictor, etc. are not designed to keep
-information secret. For performance reasons this situation is unlikely to
-change. The literature has many examples of successful timing attacks that
-extracted secret keys from these parts of the CPU.
-
-NaCl systematically avoids all data flow from secret information to the
-instruction pointer and the branch predictor. There are no conditional branches
-with conditions based on secret information; in particular, all loop counts are
-predictable in advance.
-
-This protection appears to be compatible with extremely high speed, so there is
-no reason to consider weaker protections.
-
-$(BIG No data-dependent array indices)
-
-The CPU's cache, TLB, etc. are not designed to keep addresses secret. For
-performance reasons this situation is unlikely to change. The literature has
-several examples of successful cache-timing attacks that used secret
-information leaked through addresses.
-
-NaCl systematically avoids all data flow from secret information to the
-addresses used in load instructions and store instructions. There are no array
-lookups with indices based on secret information; the pattern of memory access
-is predictable in advance.
-
-The conventional wisdom for many years was that achieving acceptable software
-speed for AES required variable-index array lookups, exposing the AES key to
-side-channel attacks, specifically cache-timing attacks. However, the paper
-$(I "Faster and timing-attack resistant AES-GCM") by Emilia Käsper and Peter Schwabe
-at CHES 2009 introduced a new implementation that set record-setting speeds for
-AES on the popular Core 2 CPU despite being immune to cache-timing attacks.
-NaCl reuses these results.
-
-$(BIG No dynamic memory allocation)
-
-The low level NaCl-like API is intended to be usable in environments that cannot
-guarantee the availability of large amounts of heap storage but that
-nevertheless rely on their cryptographic computations to continue working.
-
-They do use small amounts of stack space; these amounts will eventually be
-measured by separate benchmarks.
-
-$(BIG No copyright restrictions)
-
-All of the NaCl software is in the public domain.
 */
 /*
 
@@ -943,149 +881,7 @@ Throws: HandshakeError if exchange was unsuceesful or finished.
 
 import tweednacl.handshake;
 
-auto signedHandshake( Data,
-    SignPrimitive = Ed25519,
-    alias nonceGeneratorFn=generateNonce!(Data.length),
-    alias nonceMixer = mixNonces,
-    Pk, Sk
-    )( Pk otherPk, Sk mySk)
-{
-  alias H = NonceHandshakeSteps!(ubyte[Data.length], nonceGeneratorFn, nonceMixer);
-  alias Signer = HandshakeSigner!SignPrimitive;
-  return Handshake!(Data, H, SignPrimitive)( H(), Signer(otherPk, mySk) );
-}
 
-
-unittest {
-  alias Nonce = ubyte[24];
-  auto aliceK = generateSignKeypair();
-  auto bobK = generateSignKeypair();
-
-
-  testHandShake(
-      signedHandshake!Nonce( bobK.publicKey, aliceK.secretKey ),
-      signedHandshake!Nonce( aliceK.publicKey, bobK.secretKey )
-      );
-}
-
-
-static if (false) {
-  unittest {
-    import std.stdio;
-    import std.concurrency;
-
-    immutable aliceK = generateSignKeypair();
-    immutable bobK = generateSignKeypair();
-
-    alias Nonce = ubyte[24];
-
-    //immutable aliceTid = spawn(&aliceSide);
-    //immutable bobTid = thisTid; // spawn(&aliceSide);
-
-    static void aliceSide(Pk, Sk)(Pk bobPk, Sk aliceSk)
-    {
-      auto bobTid = receiveOnly!Tid;
-
-      // Receive a message from the owner thread.
-      receive(
-          (Tid tid) { bobTid = tid; },
-          );
-
-
-      auto msg = receiveOnly!string;
-      if (msg == "go") {
-        auto handshake = signedHandshake!Nonce( bobPk, aliceSk );
-        send(bobTid, handshake.init() );
-      }
-
-      // Send a message back to the owner thread
-      // indicating success.
-      send(ownerTid, true);
-    }
-
-
-    static void bobSide(Pk, Sk)(Pk alicePk, Sk bobSk)
-    {
-      auto aliceTid = receiveOnly!Tid;
-
-      send(ownerTid, true);
-    }
-    void testMain()
-    {
-      alias Alice = aliceSide!( typeof(bobK.publicKey), typeof(aliceK.secretKey) );
-      // Start spawnedFunc in a new thread.
-      auto aliceTid = spawn(&Alice, bobK.publicKey, aliceK.secretKey );
-      auto bobTid = spawn(&Alice, aliceK.publicKey, bobK.secretKey );
-
-      send( bobTid, aliceTid );
-      send( aliceTid, bobTid );
-
-      send( aliceTid, "go" );
-
-      // Send the number 42 to this new thread.
-      //send(tid, 42);
-      send(tid, thisTid);
-
-      // Receive the result code.
-      auto wasSuccessful = receiveOnly!(bool);
-      assert(wasSuccessful);
-      auto wasSuccessful = receiveOnly!(bool);
-      assert(wasSuccessful);
-      writefln("Successfully printed number.");
-      //writefln("\n%s", bytesToHex(msg2) );
-      //writefln( "alice=%s  -- bob:%s", bytesToHex(aliceH.open()), bytesToHex(bobH.open()) );
-    }
-
-    testMain();
-  }
-}
-
-
-struct ForwardSecretBoxer(Impl, Boxer )
-{
-  Boxer outerBoxer;
-
-  // The keypair generated for the session
-  private KeyPair!Impl sessionKeyPair;
-  private Impl.Nonce myInitNonce;
-
-  private Impl.Beforenm sharedSecret;
-
-
-  ~this() {
-    // clear the keys becuase we may live in a GC world.
-    sharedSecret[] = 0;
-    sessionKeyPair.erase();
-  }
-
-
-  /**
-    Requests a session
-    */
-  auto sessionRequest(alias safeRnd=tweednacl.basics.safeRandomBytes)()
-  {
-    sessionKeyPair = generateBoxKeypair();
-    myInitNonce = generateNonce!(Boxer.Primitive)();
-    return outerBoxer.box( myInitNonce ~ sessionKeyPair.publicKey );
-  }
-
-
-  /**
-    Creates a new boxer for the other party
-    */
-  auto open( ubyte[] sessionRequestData )
-  {
-    if (sessionRequestData.length != Impl.Nonce.length + Impl.PublicKey.length)
-      throw new HandshakeError("Invalid session request size.");
-
-    auto otherPartyNonce = sessionRequestData[0..Impl.Nonce.length];
-    //auto commonNonce = 
-
-
-
-    //sessionRequest[]
-  }
-}
 
 
 
@@ -1137,8 +933,56 @@ unittest {
 }
 
 
+unittest {
+  foreach (i;0..16)
+  {
+    // Generates a new keypair.
+    // the .sessionRequest contains the public key.
+    auto aliceSession = session();
+    auto bobSession = session();
+
+
+    auto aliceH = aliceSession.handshake();
+    auto bobH = bobSession.handshake();
+
+    // Alice and Bob exchange their session public keys.
+    bobH.succeed( aliceH.sync( bobH.response( aliceH.challenge() )));
+
+    // Alice and Bob exchange their session public keys, and now they have
+    // a secure session that cannot be decoded. When bobSession goes out of scope
+    // the public and private keys for this session are forgotten and the only
+    // way to communicate in this session is via the boxers
+    auto bobBoxer = bobSession.open( bobH.open() );
+    auto aliceBoxer = aliceSession.open( aliceH.open() );
+
+
+
+    ubyte[8192] msgBuf;
+
+    foreach(j;0..64)
+    {
+      auto mlen1 = uniform(0,4096u);
+      auto mlen2 = uniform(0,4096u);
+
+      auto rawMsg1 = msgBuf[0..mlen1];
+      auto rawMsg2 = msgBuf[mlen1..(mlen1+mlen2)];
+      unSafeRandomBytes( rawMsg1 );
+      unSafeRandomBytes( rawMsg2 );
+
+      auto msg1 = aliceBoxer.box( rawMsg1 );
+      auto msg2 = bobBoxer.box( rawMsg2 );
+
+      assert( bobBoxer.open( msg1 ) == rawMsg1 );
+      assert( aliceBoxer.open( msg2 ) == rawMsg2 );
+
+    }
+  }
+}
+
 struct Session(Impl)
 {
+  import std.typecons;
+
   KeyPair!Impl sessionKeyPair;
 
 
@@ -1159,6 +1003,22 @@ struct Session(Impl)
   auto open( ref const Impl.PublicKey pk, ref const Impl.Nonce nonce )
   {
     return boxer!Impl( sessionKeyPair.publicKey, pk, sessionKeyPair.secretKey, nonce );
+  }
+
+  /** ditto */
+  auto open(HandshakeResult)( HandshakeResult fromHandshake )
+    if (__traits(compiles, open( fromHandshake.expand )))
+  {
+    return open( fromHandshake[0], fromHandshake[1] );
+  }
+
+
+  /**
+    Create a new $(RED unsigned) handshake to agree on public keys for this session.
+    */
+  auto handshake()
+  {
+    return unsignedPublicKeyNonceHandshake!Impl(sessionKeyPair.publicKey);
   }
 }
 

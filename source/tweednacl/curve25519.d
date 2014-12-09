@@ -29,8 +29,6 @@
 */
 module tweednacl.curve25519;
 
-import tweednacl.basics : _121665, _9;
-import tweednacl.math25519;
 
 struct Curve25519 {
   enum Primitive = "curve25519";
@@ -55,6 +53,8 @@ struct Curve25519 {
       ref const Curve25519.Scalar n,
       ref const Curve25519.Value p)
   {
+    import tweednacl.math25519;
+    import tweednacl.basics : _121665, _9;
     ubyte z[32];
     long[80] x;
     long r;
@@ -113,10 +113,12 @@ struct Curve25519 {
     and returns 0.
 
     */
-  pure nothrow @safe @nogc static int scalarmultBase(
+  pure nothrow @safe @nogc static
+  int scalarmultBase(
       ref Curve25519.Value q,
       ref const Curve25519.Scalar n)
   {
+    import tweednacl.basics : _9;
     return crypto_scalarmult(q,n,_9);
   }
 
