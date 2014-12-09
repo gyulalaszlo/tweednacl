@@ -100,7 +100,7 @@ struct KeyPair(Impl)
 
   ~this() { erase(); }
 
-  /** Overwrite the keys with zeroes (call before freeing their memory) */
+  /** Overwrite the keys with zeroes ( automatically gets called on destruction ).  */
   void erase() { publicKey[] = 0; secretKey[] = 0; }
 }
 
@@ -187,8 +187,7 @@ Examples:
 }
 ---
   */
-ubyte[] sign(Impl=Ed25519, E, Key)(
-    const E[] message, ref const Key sk )
+ubyte[] sign(Impl=Ed25519, E, Key)( const E[] message, ref const Key sk )
   if ( is( Key == Impl.SecretKey ) )
 {
   size_t smlen;
@@ -239,7 +238,8 @@ unittest {
 
   auto o = generateSignKeypair();
 
-  foreach(mlen;0..16) {
+  foreach(mlenMagn;0..12) {
+    const mlen = (2 << mlenMagn) - 1;
     ubyte[] msg;
     msg.length = mlen;
     randomBuffer( msg );
@@ -411,12 +411,13 @@ struct Boxer( Impl, NonceGenerator )
 
 
 version(unittest) {
-  enum TryToForgeMessagesUpTo = 512;
+  enum TryToForgeMessagesUpTo = 16;
 
-  void testBoxers(A,B)(A aliceBoxer, B bobBoxer)
+  void testBoxers(size_t testCount=TryToForgeMessagesUpTo, A,B)(A aliceBoxer, B bobBoxer)
   {
     import tweednacl.basics : randomBuffer, forgeBuffer;
-    foreach(mlen;0..TryToForgeMessagesUpTo) {
+    foreach(mlenMagn;0..testCount) {
+      const mlen = mlenMagn == 0 ? 0 : (2 << mlenMagn - 1);
       const msg = randomBuffer(mlen);
       auto cypherText = aliceBoxer.box(msg);
       auto plainText = bobBoxer.open(cypherText);
@@ -646,238 +647,6 @@ unittest {
 }
 
 
-static if (false) {
-  /**
-    Mixes two nonces (from the initiator and the accepter) and mixes
-    them in a deterministic way.
-
-    The current implementation mixes the even-odd bytes from the nonces.
-   */
-  Nonce mixNonces(Nonce)( ref const Nonce initiator, ref const Nonce receiver )
-  {
-    Nonce o;
-    foreach(i,ref oe;o) {
-      oe = (i % 2) ? initiator[i] : receiver[i];
-    }
-    return o;
-  }
-
-  class HandshakeError : Exception {
-    this(string msg) { super("Handshake error: " ~ msg); }
-  }
-
-  struct NoSignature {}
-  struct NonceHandshakeSteps(
-      Nonce,
-      alias nonceGeneratorFn=generateNonce!(Nonce.length),
-      )
-  {
-    void init(Msg)( ref Msg msg )
-    {
-      msg.nonce = nonceGeneratorFn();
-    }
-
-    void acceptInit(InitMsg, Msg)( ref const InitMsg initMsg , ref Msg msg )
-    {
-      msg.initNonce = initMsg.nonce;
-      msg.accepterNonce = nonceGeneratorFn();
-    }
-  }
-
-  /**
-    A handshake is a simple message interface for exchanging
-    two pieces of data and deriving a common piece for both parties
-   */
-  struct Handshake( Nonce,
-      Steps = NonceHandshakeSteps!Nonce,
-      SignPrimitive = Ed25519,
-      alias nonceMixer = mixNonces
-      )
-  {
-    public:
-      Steps steps;
-
-      enum isSigned = !is(SignPrimitive == NoSignature );
-      static if(isSigned)
-      {
-        // Allow the initialization with keys.
-        SignPrimitive.PublicKey otherPartyPublicKey;
-        SignPrimitive.SecretKey mySecretKey;
-
-        // Clean the key memory afterwards
-        ~this() {
-          mySecretKey[] = 0;
-          otherPartyPublicKey[] = 0;
-        }
-
-        auto signIfNeeded(E)(E i) { return sign!SignPrimitive( i, mySecretKey ); }
-        auto openIfNeeded(E)(E m) { return openSigned!SignPrimitive( m, otherPartyPublicKey); }
-        enum SignatureSize = SignPrimitive.Signature.length;
-      } else {
-        auto signIfNeeded(E)(E m) { return m; }
-        auto openIfNeeded(E)(E m) { return m; }
-        enum SignatureSize = 0;
-      }
-    private:
-
-      Nonce exchangedNonce;
-      bool nonceExchanged = false;
-
-      struct InitMsg { Nonce nonce; }
-
-      /** The message sent on initialization */
-      struct InitAcceptMsg {
-        Nonce initNonce;
-        Nonce accepterNonce;
-      }
-
-    public:
-      /**
-        Step 1. initialize the connection.
-       */
-      ubyte[] init()
-      {
-        // allocate buffer
-        ubyte[] msg;
-        msg.length = InitMsg.sizeof;
-        auto initMsg = cast(InitMsg*)(&msg[0]);
-
-        steps.init( initMsg );
-        //initMsg.nonce = nonceGeneratorFn();
-        nonceExchanged = false;
-
-        return signIfNeeded( msg );
-      }
-
-
-      ubyte[] acceptInit( const ubyte[] initMsgBytes )
-      {
-        if (initMsgBytes.length != InitMsg.sizeof + SignatureSize)
-          throw new HandshakeError("Invalid handshake Init length");
-
-        auto openedMsg = openIfNeeded( initMsgBytes );
-        auto initMsg = cast(InitMsg*)(&openedMsg[0]);
-
-        // allocate buffer
-        ubyte[] msg;
-        msg.length = InitAcceptMsg.sizeof;
-        auto initAcceptMsg = cast(InitAcceptMsg*)(&msg[0]);
-
-        steps.acceptInit( initMsg, initAcceptMsg );
-        //initAcceptMsg.initNonce = initMsg.nonce;
-        //initAcceptMsg.accepterNonce = nonceGeneratorFn();
-
-        exchangedNonce = nonceMixer( initAcceptMsg.initNonce,
-            initAcceptMsg.accepterNonce );
-
-        nonceExchanged = true;
-
-        return signIfNeeded(msg);
-      }
-
-
-      void succeed(  const ubyte[] initAcceptMsgBytes )
-      {
-        if (initAcceptMsgBytes.length != InitAcceptMsg.sizeof + SignatureSize)
-          throw new HandshakeError("Invalid handshake InitAccept length");
-
-        auto openedMsg = openIfNeeded( initAcceptMsgBytes );
-        auto initAcceptMsg = cast(InitAcceptMsg*)(&openedMsg[0]);
-
-        exchangedNonce = nonceMixer( initAcceptMsg.initNonce,
-            initAcceptMsg.accepterNonce );
-
-        nonceExchanged = true;
-      }
-
-
-      void acceptSuccesd()
-      {
-      }
-
-
-      /**
-        Get the exchanged nonce.
-
-Throws: HandshakeError if exchange was unsuceesful or finished.
-       */
-      Nonce open()
-      {
-        if (!nonceExchanged)
-          throw new HandshakeError("Tried to open not completed handshake.");
-
-        return exchangedNonce;
-      }
-
-
-      /** Is the handshake done? (Can this handshake be $(D open)ed?) */
-      bool done() { return nonceExchanged; }
-
-  }
-
-  auto signedHandshake( Data,
-      SignPrimitive = Ed25519,
-      alias nonceGeneratorFn=generateNonce!(Data.length),
-      alias nonceMixer = mixNonces,
-      Pk, Sk
-      )( Pk otherPk, Sk mySk)
-  {
-    alias H = NonceHandshakeSteps!(ubyte[Data.length]);
-    return Handshake!(Data, H)( H(), otherPk, mySk);
-  }
-
-
-
-  auto notSignedHandshake( Data,
-      alias nonceGeneratorFn=generateNonce!(Data.length),
-      alias nonceMixer = mixNonces
-      )()
-  {
-    alias H = NonceHandshakeSteps!(ubyte[Data.length]);
-    return Handshake!(Data, H, NoSignature)( H() );
-  }
-
-
-
-  unittest {
-    import std.stdio;
-    import std.exception;
-    alias Nonce = ubyte[24];
-
-    void testHandShake(H)(H aliceH, H bobH)
-    {
-      foreach(i;0..16) {
-
-        auto msg1 = aliceH.init();
-
-        assert(!aliceH.done());
-        assertThrown!HandshakeError( aliceH.open() );
-
-        auto msg2 = bobH.acceptInit( msg1 );
-        aliceH.succeed( msg2 );
-
-        assert( aliceH.done() );
-        assert( bobH.done() );
-        assert( aliceH.open() == bobH.open() );
-
-
-      }
-    }
-
-    testHandShake(
-        notSignedHandshake!Nonce(), notSignedHandshake!Nonce()
-        );
-
-    auto aliceK = generateSignKeypair();
-    auto bobK = generateSignKeypair();
-
-
-    testHandShake(
-        signedHandshake!Nonce( bobK.publicKey, aliceK.secretKey ),
-        signedHandshake!Nonce( aliceK.publicKey, bobK.secretKey )
-        );
-  }
-}
 
 import tweednacl.handshake;
 
@@ -893,54 +662,37 @@ auto session(Impl=Curve25519XSalsa20Poly1305)()
 /*
    Creates and uses a session
 */
-unittest {
-  foreach (i;0..16)
-  {
-    // Generates a new keypair.
-    // the .sessionRequest contains the public key.
-    auto aliceSession = session();
-    auto bobSession = session();
+unittest
+{
+  // Generates a new keypair.
+  auto aliceSession = session();
+  auto bobSession = session();
 
-    auto nonceFromHandshake = generateBoxNonce();
+  auto nonceFromHandshake = generateBoxNonce();
 
-    // Alice and Bob exchange their session public keys, and now they have
-    // a secure session that cannot be decoded. When bobSession goes out of scope
-    // the public and private keys for this session are forgotten and the only
-    // way to communicate in this session is via the boxers
-    auto bobBoxer = bobSession.open( aliceSession.request[0..32], nonceFromHandshake );
-    auto aliceBoxer = aliceSession.open( bobSession.request[0..32], nonceFromHandshake );
+  // Alice and Bob exchange their session public keys, and now they have
+  // a secure session that cannot be decoded. When bobSession goes out of scope
+  // the public and private keys for this session are forgotten and the only
+  // way to communicate in this session is via the boxers
+  auto bobBoxer = bobSession.open( aliceSession.request[0..32], nonceFromHandshake );
+  auto aliceBoxer = aliceSession.open( bobSession.request[0..32], nonceFromHandshake );
 
-    ubyte[8192] msgBuf;
+  auto rawMsg1 = randomBuffer( uniform(0,4096u) );
+  auto rawMsg2 = randomBuffer( uniform(0,4096u) );
 
-    foreach(j;0..64)
-    {
-      auto mlen1 = uniform(0,4096u);
-      auto mlen2 = uniform(0,4096u);
+  auto msg1 = aliceBoxer.box( rawMsg1 );
+  auto msg2 = bobBoxer.box( rawMsg2 );
 
-      auto rawMsg1 = msgBuf[0..mlen1];
-      auto rawMsg2 = msgBuf[mlen1..(mlen1+mlen2)];
-      unSafeRandomBytes( rawMsg1 );
-      unSafeRandomBytes( rawMsg2 );
+  assert( bobBoxer.open( msg1 ) == rawMsg1 );
+  assert( aliceBoxer.open( msg2 ) == rawMsg2 );
 
-      auto msg1 = aliceBoxer.box( rawMsg1 );
-      auto msg2 = bobBoxer.box( rawMsg2 );
-
-      assert( bobBoxer.open( msg1 ) == rawMsg1 );
-      assert( aliceBoxer.open( msg2 ) == rawMsg2 );
-
-    }
-  }
 }
 
 
-unittest {
-  foreach (i;0..16)
-  {
-    // Generates a new keypair.
-    // the .sessionRequest contains the public key.
+unittest
+{
     auto aliceSession = session();
     auto bobSession = session();
-
 
     auto aliceH = aliceSession.handshake();
     auto bobH = bobSession.handshake();
@@ -955,34 +707,11 @@ unittest {
     auto bobBoxer = bobSession.open( bobH.open() );
     auto aliceBoxer = aliceSession.open( aliceH.open() );
 
-
-
-    ubyte[8192] msgBuf;
-
-    foreach(j;0..64)
-    {
-      auto mlen1 = uniform(0,4096u);
-      auto mlen2 = uniform(0,4096u);
-
-      auto rawMsg1 = msgBuf[0..mlen1];
-      auto rawMsg2 = msgBuf[mlen1..(mlen1+mlen2)];
-      unSafeRandomBytes( rawMsg1 );
-      unSafeRandomBytes( rawMsg2 );
-
-      auto msg1 = aliceBoxer.box( rawMsg1 );
-      auto msg2 = bobBoxer.box( rawMsg2 );
-
-      assert( bobBoxer.open( msg1 ) == rawMsg1 );
-      assert( aliceBoxer.open( msg2 ) == rawMsg2 );
-
-    }
-  }
+    testBoxers!4(bobBoxer, aliceBoxer);
 }
 
 struct Session(Impl)
 {
-  import std.typecons;
-
   KeyPair!Impl sessionKeyPair;
 
 
@@ -1018,7 +747,20 @@ struct Session(Impl)
     */
   auto handshake()
   {
-    return unsignedPublicKeyNonceHandshake!Impl(sessionKeyPair.publicKey);
+    return boxHandshake!Impl(sessionKeyPair.publicKey);
+  }
+
+  /**
+    Create a new $(RED unsigned) handshake to agree on public keys for this session.
+    */
+  auto signedHandshake(
+    Primitive=Curve25519XSalsa20Poly1305,
+    SignPrimitive=Ed25519)(
+      SignPrimitive.PublicKey otherPartyPublicKey,
+      SignPrimitive.SecretKey mySecretKey
+      )
+  {
+    return signedBoxHandshake!Impl(sessionKeyPair.publicKey, otherPartyPublicKey, mySecretKey);
   }
 }
 

@@ -12,26 +12,6 @@ class HandshakeError : Exception {
   this(string msg) { super("Handshake error: " ~ msg); }
 }
 
-/**
-  A signer that does not sign anything. Useful if the communication
-  channel is already secure (like an already established Box).
-
-  Also implements the interface required by the signature mechanism.
-  */
-struct NoSignature
-{
-  alias RandomData = ubyte[0];
-  struct Data { RandomData challenge; RandomData response; } //RandomBlock!(RandomData, true);
-
-  enum SignatureSize = 0;
-
-  auto sign(E)(E m) { return m; }
-  auto open(N, E)(E m) { return m; }
-  void restart() {}
-
-  void initRandom() {}
-}
-
 enum isHandshakeSigner(T) = 
   __traits( hasMember, T, "sign" )
   && __traits( hasMember, T, "open" )
@@ -46,143 +26,38 @@ unittest
   static assert( !isHandshakeSigner!Fake );
 }
 
-/**
-  A signer takes a SignPrimitive and sign each message in the handshake.
-
-  It also adds random bytes to make replay attacks harder.
-  */
-template HandshakeSigner(SignPrimitive, alias safeRnd=safeRandomBytes)
-{
-  enum isSigned = !is(SignPrimitive == NoSignature );
-
-  struct RandomBlock(RandomData, bool hasResponse)
-  {
-    RandomData challenge;
-    static if (hasResponse)
-      RandomData response;
-  }
-
-  // The one that actually signes things
-  struct HandshakeSigner
-  {
-    alias RandomData = ubyte[8];
-    alias Data = RandomBlock!(RandomData, true);
-
-    enum SignatureSize = SignPrimitive.Signature.length;
-
-    // Allow the initialization with keys.
-    SignPrimitive.PublicKey otherPartyPublicKey;
-    SignPrimitive.SecretKey mySecretKey;
-
-
-    RandomData myRandom;
-    private RandomData otherRandom;
-
-    // We use the random from the other party sent the first
-    // time in this handshake
-    bool seenOtherRandom = false;
-
-    // Clean the key memory afterwards
-    ~this() {
-      mySecretKey[] = 0;
-      otherPartyPublicKey[] = 0;
-    }
-
-    /**
-      Signs an outgoing message and adds the random bits.
-     */
-    auto sign(E)(E i)
-    {
-      auto msgBuf = zeroPadded( Data.sizeof, i );
-      auto signedBuf = zeroOut( SignPrimitive.Bytes + Data.sizeof, i );
-
-      auto signRandomData = cast(Data*)(&msgBuf[0]);
-      signRandomData.challenge = myRandom;
-      signRandomData.response = otherRandom;
-
-      size_t smlen;
-      SignPrimitive.sign( signedBuf, smlen, msgBuf, mySecretKey );
-
-      return signedBuf[0..smlen];
-    }
-
-
-    /**
-      Opens a signed message and checks the length, the randoms and the signature.
-     */
-    auto open(E, T)(T m)
-    {
-      if (m.length != E.sizeof + Data.sizeof + SignPrimitive.Bytes )
-        throw new HandshakeError("Invalid handshake message length ");
-
-      auto o = zeroOut(m);
-      size_t mlen;
-      if (!SignPrimitive.signOpen( o, mlen, m, otherPartyPublicKey ))
-        throw new HandshakeError("Handshake signature mismatch");
-
-      auto signRandomData = cast(Data*)(&o[0]);
-      if (signRandomData.response != myRandom)
-        throw new HandshakeError("Error in handshake");
-
-      // store the outher partys random.
-      if (!seenOtherRandom) {
-        otherRandom = signRandomData.challenge;
-        seenOtherRandom = true;
-      }
-
-      return o[(Data.sizeof)..mlen];
-    }
-
-
-    /**
-      Restart the signature process and cleans the random bytes. This
-      is needed to restart a handshake.
-     */
-    void restart()
-    {
-      myRandom[] = 0;
-      otherRandom[] = 0;
-      seenOtherRandom = false;
-    }
-
-
-    void initRandom()
-    {
-      safeRnd( myRandom );
-    }
-
-  }
-
-}
 
 
 /**
   A handshake is a simple message interface for exchanging
   two pieces of data and deriving a common piece for both parties
 
+Params:
+  Signer = The Signer to use to sign the messages. use NoSigner to not sign
+  messages (if the channel is considered safe).
+
+  Steps = A list of parts to exchange in the handshake. See $(D
+  PublicKeyHandshake) and $(D NonceHandshake)
 
 Examples:
 
+Exchanging public keys
 ---
-  auto Val = ubyte[24];
-
-  auto aliceH = signedHandshake!Val( bobPubKey, aliceSecretKey );
-  auto bobH = signedHandshake!Val( alicePubKey, bobSecretKey);
+  auto aliceH = unsignedPublicKeyHandshake( alicePublicKey );
+  auto bobH = unsignedPublicKeyHandshake( bobPublicKey );
 
   auto msg1 = aliceH.challenge();
-
-  assert(!aliceH.done());
-  assertThrown!HandshakeError( aliceH.open() );
-
   auto msg2 = bobH.response( msg1 );
-  assert( !bobH.done() );
-
   auto msg3 = aliceH.sync( msg2 );
+
   assert( aliceH.done() );
 
   bobH.succeed( msg3 );
   assert( bobH.done() );
-  assert( aliceH.open() == bobH.open() );
+
+  // at this point the public keys are exchanged
+  assert( aliceH.open() == bobPublicKey );
+  assert( bobH.open()  == alicePublicKey );
 ---
 
   */
@@ -481,23 +356,8 @@ version(unittest)
 
 }
 
-
 /**
-  Mixes two nonces (from the initiator and the accepter) and mixes
-  them in a deterministic way.
 
-  The current implementation mixes the even-odd bits from the nonces.
- */
-pure @nogc nothrow Nonce bitmixNonces(Nonce)( ref const Nonce initiator, ref const Nonce receiver )
-{
-  Nonce o;
-  foreach(i,ref oe;o) {
-    oe = cast(ubyte)((initiator[i] ^ 0b01010101u) + (receiver[i] ^ 0b10101010u));
-  }
-  return o;
-}
-
-/**
   Implements the exchange of random Nonces between two parties.
 
   The resulting Nonce is a bit-mixture of the nonces offered by both
@@ -566,8 +426,14 @@ struct NonceHandshakeSteps(
 
 }
 
-/** Creates an unsigned handshake for exchanging nonces */
-auto unsignedNonceHandshake( Nonce,
+/**
+  Creates a handshake for exchanging nonces. See $(SEE NonceHandshakeSteps) 
+
+  The resulting Nonce is a bit-mixture of the nonces offered by both
+  by the challenger and the responder. (see the $(D mixNonces) function)
+
+  */
+auto nonceHandshake( Nonce,
     alias nonceGeneratorFn=generateNonce!(Nonce.length)
     )()
 {
@@ -576,21 +442,18 @@ auto unsignedNonceHandshake( Nonce,
 }
 
 
-unittest {
+unittest
+{
   alias Nonce = ubyte[24];
   testHandshake(
-      unsignedNonceHandshake!Nonce(), unsignedNonceHandshake!Nonce()
+      nonceHandshake!Nonce(), nonceHandshake!Nonce()
       );
 
 }
 
 
 
-/**
-  Creates a new $(RED unsigned) handshake for exchanging public keys.
-
-  This handshake simply proposes the provided public key.
-  */
+/** ditto */
 auto signedNonceHandshake( Data,
     SignPrimitive = Ed25519,
     alias nonceGeneratorFn=generateNonce!(Data.length),
@@ -604,7 +467,8 @@ auto signedNonceHandshake( Data,
 }
 
 
-unittest {
+unittest
+{
   alias Nonce = ubyte[24];
 
   Ed25519.PublicKey alicePk, bobPk;
@@ -630,7 +494,7 @@ unittest {
 
 
 /**
-  Implements the exchange of random Nonces between two parties.
+  Implements the exchange of Public keys between two parties.
 
   The resulting Nonce is a bit-mixture of the nonces offered by both
   by the challenger and the responder. (see the $(D mixNonces) function)
@@ -712,11 +576,10 @@ struct PublicKeyExchangeHandshakeSteps(
 
 
 /**
-  Creates a new $(RED unsigned) handshake for exchanging public keys.
-
-  This handshake simply proposes the provided public key.
+  Creates a new handshake for exchanging public keys that simply proposes the
+  provided public key.
   */
-auto unsignedPublicKeyHandshake(
+auto publicKeyHandshake(
     Primitive=Curve25519XSalsa20Poly1305,
     ExchangePk
     )( ref const ExchangePk myPk)
@@ -726,11 +589,7 @@ auto unsignedPublicKeyHandshake(
   return Handshake!(NoSignature,H)( NoSignature(), H( myPk ));
 }
 
-/**
-  Creates a new $(GREEN signed) handshake for exchanging public keys.
-
-  This handshake simply proposes the provided public key.
-  */
+/** ditto */
 auto signedPublicKeyHandshake(
     Primitive=Curve25519XSalsa20Poly1305,
     SignPrimitive = Ed25519,
@@ -746,7 +605,8 @@ auto signedPublicKeyHandshake(
 }
 
 
-version(unittest) {
+unittest
+{
 
   static void testPublicKeyHandshake(A, B, APK, BPK)(A aliceH, B bobH, APK alicePk, BPK bobPk)
   {
@@ -761,90 +621,87 @@ version(unittest) {
     aliceH.restart();
     bobH.restart();
   }
+
+
+  {
+    alias Pk = Curve25519XSalsa20Poly1305.PublicKey;
+
+    Pk alicePk = randomBuffer(Pk.length);
+    Pk bobPk = randomBuffer(Pk.length);
+
+    auto aliceH = publicKeyHandshake( alicePk );
+    auto bobH = publicKeyHandshake( bobPk );
+
+    testPublicKeyHandshake( aliceH, bobH, alicePk, bobPk );
+  }
+
+  {
+    alias Pk = Curve25519XSalsa20Poly1305.PublicKey;
+
+    Ed25519.PublicKey aliceSPk, bobSPk;
+    Ed25519.SecretKey aliceSSk, bobSSk;
+
+    Ed25519.keypair!safeRandomBytes( aliceSPk, aliceSSk );
+    Ed25519.keypair!safeRandomBytes( bobSPk, bobSSk );
+
+
+    Pk alicePk = randomBuffer(Pk.length);
+    Pk bobPk = randomBuffer(Pk.length);
+
+    auto aliceH = signedPublicKeyHandshake( alicePk, bobSPk, aliceSSk );
+    auto bobH = signedPublicKeyHandshake( bobPk, aliceSPk, bobSSk );
+
+    testPublicKeyHandshake( aliceH, bobH, alicePk, bobPk );
+  }
 }
-
-
-unittest
-{
-  alias Pk = Curve25519XSalsa20Poly1305.PublicKey;
-
-  Pk alicePk = randomBuffer(Pk.length);
-  Pk bobPk = randomBuffer(Pk.length);
-
-  auto aliceH = unsignedPublicKeyHandshake( alicePk );
-  auto bobH = unsignedPublicKeyHandshake( bobPk );
-
-  testPublicKeyHandshake( aliceH, bobH, alicePk, bobPk );
-}
-
-unittest
-{
-  alias Pk = Curve25519XSalsa20Poly1305.PublicKey;
-
-  Ed25519.PublicKey aliceSPk, bobSPk;
-  Ed25519.SecretKey aliceSSk, bobSSk;
-
-  Ed25519.keypair!safeRandomBytes( aliceSPk, aliceSSk );
-  Ed25519.keypair!safeRandomBytes( bobSPk, bobSSk );
-
-
-  Pk alicePk = randomBuffer(Pk.length);
-  Pk bobPk = randomBuffer(Pk.length);
-
-  auto aliceH = signedPublicKeyHandshake( alicePk, bobSPk, aliceSSk );
-  auto bobH = signedPublicKeyHandshake( bobPk, aliceSPk, bobSSk );
-
-  testPublicKeyHandshake( aliceH, bobH, alicePk, bobPk );
-
-}
-
 
 /**
-  Creates a new $(RED unsigned) handshake for exchanging public keys.
-
-  This handshake simply proposes the provided public key.
+  Creates a new handshake for exchanging public keys and a nonce to create a
+  Boxer.
   */
-auto unsignedPublicKeyNonceHandshake(
+auto boxHandshake(
     Primitive=Curve25519XSalsa20Poly1305,
-    Nonce=Primitive.Nonce,
-    alias nonceGeneratorFn=generateNonce!(Nonce.length),
+    alias nonceGeneratorFn=generateNonce!Primitive,
+    alias nonceMixerFn=bitmixNonces!(Primitive.Nonce),
     ExchangePk
     )( ref const ExchangePk myPk)
-  if (is(ExchangePk == Primitive.PublicKey)
-      && is(Nonce == Primitive.Nonce))
+  if (is(ExchangePk == Primitive.PublicKey))
 {
-  alias NonH = NonceHandshakeSteps!(ubyte[Nonce.length], nonceGeneratorFn);
+  alias NonH = NonceHandshakeSteps!(Primitive.Nonce, nonceGeneratorFn, nonceMixerFn);
   alias PkH = PublicKeyExchangeHandshakeSteps!(Primitive.PublicKey);
   return Handshake!(NoSignature,PkH,NonH)( NoSignature(), PkH( myPk ), NonH());
 }
 
+/** ditto */
+auto signedBoxHandshake(
+    Primitive=Curve25519XSalsa20Poly1305,
+    SignPrimitive = Ed25519,
+    alias nonceGeneratorFn=generateNonce!Primitive,
+    alias nonceMixerFn=bitmixNonces!(Primitive.Nonce),
+    ExchangePk, SignPk, SignSk
+    )( ref const ExchangePk myPk, ref const SignPk otherSignPk, ref const SignSk mySignSk)
+  if (is(ExchangePk == Primitive.PublicKey)
+      && is(SignPk == SignPrimitive.PublicKey)
+      && is(SignSk == SignPrimitive.SecretKey))
+{
+  alias NonH = NonceHandshakeSteps!(Primitive.Nonce, nonceGeneratorFn, nonceMixerFn);
+  alias PkH = PublicKeyExchangeHandshakeSteps!(Primitive.PublicKey);
+  alias Signer = HandshakeSigner!SignPrimitive;
+  return Handshake!(Signer,PkH,NonH)( Signer( otherSignPk, mySignSk ),  PkH( myPk ), NonH() );
+}
+
 unittest
 {
 
-  static void dump( string name, const ubyte[] b )
-  {
-    writefln("%s = %s",name, bytesToHex(b));
-  }
-
-  static void testPublicKeyNonceHandshake(A, B, APK, BPK)(A aliceH, B bobH, APK alicePk, BPK bobPk)
+  static void testBoxHandshake(A, B, APK, BPK)(A aliceH, B bobH, APK alicePk, BPK bobPk)
   {
     auto msg1 = aliceH.challenge();
     auto msg2 = bobH.response( msg1 );
     auto msg3 = aliceH.sync( msg2 );
     bobH.succeed( msg3 );
 
-    //dump("msg1", msg1);
-    //dump("msg2", msg2);
-    //dump("msg3", msg3);
-
     auto ao = aliceH.open();
     auto bo = bobH.open();
-
-    //dump("aliceH[0]", ao[0]);
-    //dump("aliceH[1]", ao[1]);
-
-    //dump("bobH[0]", bo[0]);
-    //dump("bobH[1]", bo[1]);
 
     assert( ao[1] == bo[1] );
     assert( bo[0]  == alicePk );
@@ -854,14 +711,178 @@ unittest
     bobH.restart();
   }
 
-  alias Pk = Curve25519XSalsa20Poly1305.PublicKey;
+  {
+    alias Pk = Curve25519XSalsa20Poly1305.PublicKey;
 
-  Pk alicePk = randomBuffer(Pk.length);
-  Pk bobPk = randomBuffer(Pk.length);
+    Pk alicePk = randomBuffer(Pk.length);
+    Pk bobPk = randomBuffer(Pk.length);
 
-  auto aliceH = unsignedPublicKeyNonceHandshake( alicePk );
-  auto bobH = unsignedPublicKeyNonceHandshake( bobPk );
+    auto aliceH = boxHandshake( alicePk );
+    auto bobH = boxHandshake( bobPk );
 
-  testPublicKeyNonceHandshake( aliceH, bobH, alicePk, bobPk );
+    testBoxHandshake( aliceH, bobH, alicePk, bobPk );
+  }
+
+  {
+    alias Pk = Curve25519XSalsa20Poly1305.PublicKey;
+
+    Ed25519.PublicKey aliceSPk, bobSPk;
+    Ed25519.SecretKey aliceSSk, bobSSk;
+
+    Ed25519.keypair!safeRandomBytes( aliceSPk, aliceSSk );
+    Ed25519.keypair!safeRandomBytes( bobSPk, bobSSk );
+
+    Pk alicePk = randomBuffer(Pk.length);
+    Pk bobPk = randomBuffer(Pk.length);
+
+    auto aliceH = signedBoxHandshake( alicePk, bobSPk, aliceSSk );
+    auto bobH = signedBoxHandshake( bobPk, aliceSPk, bobSSk );
+
+    testBoxHandshake( aliceH, bobH, alicePk, bobPk );
+  }
 }
 
+
+/**
+  Mixes two nonces (from the initiator and the accepter) and mixes
+  them in a deterministic way.
+
+  The current implementation mixes the even-odd bits from the nonces.
+ */
+pure @nogc nothrow Nonce bitmixNonces(Nonce)( ref const Nonce initiator, ref const Nonce receiver )
+{
+  Nonce o;
+  foreach(i,ref oe;o) {
+    oe = cast(ubyte)((initiator[i] ^ 0b01010101u) + (receiver[i] ^ 0b10101010u));
+  }
+  return o;
+}
+
+/**
+  A signer that does not sign anything. Useful if the communication
+  channel is already secure (like an already established Box).
+
+  Also implements the interface required by the signature mechanism.
+  */
+struct NoSignature
+{
+  alias RandomData = ubyte[0];
+  struct Data { RandomData challenge; RandomData response; } //RandomBlock!(RandomData, true);
+
+  enum SignatureSize = 0;
+
+  auto sign(E)(E m) { return m; }
+  auto open(N, E)(E m) { return m; }
+  void restart() {}
+
+  void initRandom() {}
+}
+
+/**
+  A signer takes a SignPrimitive and sign each message in the handshake.
+
+  It also adds random bytes to make replay attacks harder.
+  */
+template HandshakeSigner(SignPrimitive, alias safeRnd=safeRandomBytes)
+{
+  enum isSigned = !is(SignPrimitive == NoSignature );
+
+  struct RandomBlock(RandomData, bool hasResponse)
+  {
+    RandomData challenge;
+    static if (hasResponse)
+      RandomData response;
+  }
+
+  // The one that actually signes things
+  struct HandshakeSigner
+  {
+    alias RandomData = ubyte[8];
+    alias Data = RandomBlock!(RandomData, true);
+
+    enum SignatureSize = SignPrimitive.Signature.length;
+
+    // Allow the initialization with keys.
+    SignPrimitive.PublicKey otherPartyPublicKey;
+    SignPrimitive.SecretKey mySecretKey;
+
+
+    RandomData myRandom;
+    private RandomData otherRandom;
+
+    // We use the random from the other party sent the first
+    // time in this handshake
+    bool seenOtherRandom = false;
+
+    // Clean the key memory afterwards
+    ~this() {
+      mySecretKey[] = 0;
+      otherPartyPublicKey[] = 0;
+    }
+
+    /**
+      Signs an outgoing message and adds the random bits.
+     */
+    auto sign(E)(E i)
+    {
+      auto msgBuf = zeroPadded( Data.sizeof, i );
+      auto signedBuf = zeroOut( SignPrimitive.Bytes + Data.sizeof, i );
+
+      auto signRandomData = cast(Data*)(&msgBuf[0]);
+      signRandomData.challenge = myRandom;
+      signRandomData.response = otherRandom;
+
+      size_t smlen;
+      SignPrimitive.sign( signedBuf, smlen, msgBuf, mySecretKey );
+
+      return signedBuf[0..smlen];
+    }
+
+
+    /**
+      Opens a signed message and checks the length, the randoms and the signature.
+     */
+    auto open(E, T)(T m)
+    {
+      if (m.length != E.sizeof + Data.sizeof + SignPrimitive.Bytes )
+        throw new HandshakeError("Invalid handshake message length ");
+
+      auto o = zeroOut(m);
+      size_t mlen;
+      if (!SignPrimitive.signOpen( o, mlen, m, otherPartyPublicKey ))
+        throw new HandshakeError("Handshake signature mismatch");
+
+      auto signRandomData = cast(Data*)(&o[0]);
+      if (signRandomData.response != myRandom)
+        throw new HandshakeError("Error in handshake");
+
+      // store the outher partys random.
+      if (!seenOtherRandom) {
+        otherRandom = signRandomData.challenge;
+        seenOtherRandom = true;
+      }
+
+      return o[(Data.sizeof)..mlen];
+    }
+
+
+    /**
+      Restart the signature process and cleans the random bytes. This
+      is needed to restart a handshake.
+     */
+    void restart()
+    {
+      myRandom[] = 0;
+      otherRandom[] = 0;
+      seenOtherRandom = false;
+    }
+
+
+    void initRandom()
+    {
+      safeRnd( myRandom );
+    }
+
+  }
+
+}
