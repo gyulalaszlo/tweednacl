@@ -161,12 +161,130 @@ struct CryptoPrimitive
   string versionStr = "-";
 }
 
-struct BasicBoxInfo {
-  size_t KeyBytes;
+mixin template NaClPrimitive(string name, string implementation, string versionStr="-")
+{
+  enum isNaClPrimitive = true;
 
-  size_t NonceBytes;
-  /** The number of 0 bytes in front of the plaintext */
-  size_t ZeroBytes;
-  /** The number of 0 bytes in front of the encrypted box. */
-  size_t BoxZeroBytes;
+  enum Primitive = name;
+  enum Implementation = implementation;
+  enum Version = versionStr;
 }
+
+/** A hash primitive */
+mixin template HashAlgorithm(size_t bytes)
+{
+  enum Bytes = bytes;
+
+  alias HashValue = ubyte[bytes];
+  alias Value = HashValue;
+}
+
+mixin template SHA512Algorithm( string implName, string versionStr = "-")
+{
+  mixin NaClPrimitive!("sha512", implName, versionStr );
+  mixin HashAlgorithm!( 64 );
+}
+
+
+
+
+
+mixin template BoxedAlgorithm(size_t zero, size_t boxZero)
+{
+  /** The number of 0 bytes in front of the plaintext */
+  enum ZeroBytes = zero;
+  /** The number of 0 bytes in front of the encrypted box. */
+  enum BoxZeroBytes = boxZero;
+}
+
+mixin template AlgorithmWithNonce(size_t nonceBytes)
+{
+  /** The bytes the nonce of this box uses. */
+  enum NonceBytes = nonceBytes;
+
+  /** The type of the nonce used */
+  alias Nonce = ubyte[NonceBytes];
+}
+
+
+mixin template SecretKeyAlgorithm(size_t keyBytes)
+{
+  enum KeyBytes = keyBytes;
+  alias Key = ubyte[keyBytes];
+}
+
+mixin template PublicKeyAlgorithm( size_t publicKeyBytes, size_t secretKeyBytes,)
+{
+  enum PublicKeyBytes = publicKeyBytes;
+  enum SecretKeyBytes = secretKeyBytes;
+  alias PublicKey = ubyte[PublicKeyBytes];
+  alias SecretKey = ubyte[SecretKeyBytes];
+}
+
+mixin template SecretBoxAlgorithm( size_t zero, size_t boxZero, size_t keyBytes, size_t nonceBytes)
+{
+  mixin BoxedAlgorithm!( zero, boxZero );
+  mixin SecretKeyAlgorithm!keyBytes;
+  mixin AlgorithmWithNonce!nonceBytes;
+}
+
+mixin template CryptoBoxAlgorithm( size_t zero, size_t boxZero, size_t beforeNmBytes, size_t nonceBytes, size_t publicKeyBytes, size_t secretKeyBytes)
+{
+  mixin SecretBoxAlgorithm!( zero, boxZero, beforeNmBytes, nonceBytes );
+  mixin PublicKeyAlgorithm!(publicKeyBytes, secretKeyBytes);
+  alias Beforenm = Key;
+}
+
+
+mixin template XSalsa20Poly1305Implementation( string implName, string versionStr = "-")
+{
+  mixin NaClPrimitive!("xsalsa20poly1305", implName, versionStr );
+  mixin SecretBoxAlgorithm!( 32, 16, 32, 24 );
+}
+
+mixin template Curve25519XSalsa20Poly1305Implementation( 
+    string implName, string versionStr = "-")
+{
+  mixin NaClPrimitive!("curve25519xsalsa20poly1305", implName, versionStr );
+  mixin CryptoBoxAlgorithm!( 32, 16, 32, 24, 32, 32 );
+}
+
+
+
+
+
+template isCryptoPrimitive(Impl)
+{
+    alias PrimitiveT = typeof(Impl.Primitive);
+    static if (is(PrimitiveT == string))
+      enum isCryptoPrimitive = true;
+    else {
+      static if (is(PrimitiveT == CryptoPrimitive))
+        enum isCryptoPrimitive = true;
+      else
+        enum isCryptoPrimitive = false;
+    }
+
+}
+
+
+template primitiveName(Impl)
+  if (isCryptoPrimitive!Impl)
+{
+  alias PrimitiveT = typeof(Impl.Primitive);
+  static if (is(PrimitiveT == string))
+    enum primitiveName = Impl.Primitive;
+  else {
+    static if (is(PrimitiveT == CryptoPrimitive))
+      enum primitiveName = Impl.Primitive.primitive;
+    else
+      static assert(0);
+  }
+}
+
+
+enum isHash(Impl) = isCryptoPrimitive!Impl
+  && is(typeof(Impl.Bytes[0]) == ubyte);
+
+
+

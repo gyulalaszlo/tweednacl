@@ -96,8 +96,6 @@ template Handshake( Signer, Steps... )
           input, stepName, input);
 
       prelude ~= "signer.open( inputBuf );";
-      //prelude ~= "if (openedMsg.length != " ~ input ~ ".sizeof)";
-      //prelude ~= "  throw new HandshakeError(\"Invalid handshake input message length in " ~ stepName  ~ ".\");";
       prelude ~= "auto inputMsg = " ~ "(cast(" ~ input ~ "*)(&inputBuf[Signer.Bytes]));";
 
       foreach(n;inputName.split(','))
@@ -860,7 +858,6 @@ template HandshakeSigner(SignPrimitive, alias safeRnd=safeRandomBytes)
         otherRandom = signRandomData.challenge;
         seenOtherRandom = true;
       }
-
     }
 
 

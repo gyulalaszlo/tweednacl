@@ -23,7 +23,7 @@ private bool isPowerOf2(T)(T x) { return x && !(x & (x - 1)); }
 /**
   Get the bit count for a given alphabet size
   */
-private size_t bitCount( size_t len ) {
+private T bitCount(T)( T len ) {
   if (len == 0) return 0;
   auto bits = 0;
   while(len > 0) { len /= 2; bits++; }
@@ -72,23 +72,89 @@ body {
 }
 
 
+struct Alphabet
+{
+  string chars = "0123456789abcdef";
+  char paddingChar = '=';
+  ubyte bits;
+  ubyte bitmask;
+  ushort size;
+
+  ubyte[char] mapping;
+
+
+  this(string characters, char paddingC = '=')
+  in {
+    assert( isPowerOf2( characters.length ) );
+  }
+  body {
+    bits = cast(ubyte)(bitCount(characters.length));
+    bitmask = getBitMask( bits );
+    size = cast(ubyte)(characters.length);
+    chars = characters;
+    paddingChar = paddingC;
+    initMapping();
+  }
+
+
+  this( ubyte alphabetBits, char startC, char paddingC = '=' )
+  in {
+    assert( alphabetBits <= 8 );
+  }
+  body {
+    const alphabetSize = 1 << alphabetBits;
+    import std.array;
+    auto c = appender!string;
+    c.reserve(alphabetSize);
+    foreach(ch;startC..startC+alphabetSize)
+      c ~= cast(char)(ch);
+
+    bits = alphabetBits;
+    bitmask = getBitMask( alphabetBits );
+    size = cast(ushort)(1u << alphabetBits);
+    chars = c.data;
+    paddingChar = paddingC;
+    initMapping();
+  }
+
+  void initMapping()
+  {
+    foreach(i,c;chars) mapping[cast(char)(c)] = cast(ubyte)(i);
+  }
+
+
+  pure nothrow @nogc char opIndex( size_t i ) const
+  in {
+    assert( i < chars.length );
+  }
+  body {
+    return chars[i];
+  }
+
+
+
+}
+
+enum ByteAlphabet = Alphabet(8, 0x00 );
+enum BinaryAlphabet = Alphabet("01");
+enum HexAlphabet = Alphabet("0123456789abcdef");
+enum HexAlphabetUpper = Alphabet("0123456789ABCDEF");
+enum Base64Alphabet = Alphabet("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/");
+
+
 /**
   Converts data to a string using characters from the passed alphabet.
   */
-template toByteStringImpl(string alphabet="0123456789abcdef", char paddingChar='=')
+template toByteStringImpl(Alphabet A, Alphabet B=ByteAlphabet)
 {
-  static assert( isPowerOf2( alphabet.length ) );
   import std.array;
   import std.math;
   import std.bitmanip;
-  enum dataBits = ubyte.sizeof * 8;
-  enum alphabetBits = bitCount(alphabet.length);
-  enum bitsPerLetterGroup = lcm( alphabetBits, dataBits );
 
-  enum lettersPerGroup = bitsPerLetterGroup / alphabetBits;
-  enum bytesPerGroup = bitsPerLetterGroup / dataBits;
+  enum bitsPerLetterGroup = lcm!uint( A.bits, B.bits );
+  enum outLettersPerGroup = bitsPerLetterGroup / A.bits;
+  enum inLettersPerGroup = bitsPerLetterGroup / B.bits;
 
-  enum letterMask = getBitMask(alphabetBits);
 
   alias Buf = ulong;
 
@@ -100,58 +166,95 @@ template toByteStringImpl(string alphabet="0123456789abcdef", char paddingChar='
     auto byteCount = bytes.length;
     auto byteIdx = &bytes[0];
     auto o = appender!string;
+    o.reserve( byteCount / B.bits * A.bits );
     Buf buffer;
 
     while(byteCount > 0) {
       size_t padBytes = 0;
-      size_t maxLetters = lettersPerGroup;
+      size_t maxLetters = outLettersPerGroup;
+      ubyte[Buf.sizeof] b;
 
-      if (byteCount >= bytesPerGroup) {
-        buffer = bigEndianToNative!Buf(byteIdx[0..Buf.sizeof]);
-        byteCount -= bytesPerGroup;
+
+      if (byteCount >= inLettersPerGroup) {
+        // read into the buffer
+        buffer = 0;
+        foreach(i;0..inLettersPerGroup)
+        {
+          immutable offset = (inLettersPerGroup - i - 1) * B.bits;
+          immutable idx = byteIdx[i];
+          buffer += B.mapping[ idx ] << offset;
+        }
+        byteCount -= inLettersPerGroup;
       } else {
-        ubyte[Buf.sizeof] b;
-        b[0..byteCount] = byteIdx[0..byteCount];
-        buffer = bigEndianToNative!Buf(b);
-        padBytes = bytesPerGroup - byteCount;
+
+        buffer = 0;
+        foreach(i;0..byteCount)
+        {
+          buffer += (B.mapping[ byteIdx[i] ] << ( (inLettersPerGroup - i - 1) * B.bits));
+        }
+
+        padBytes = inLettersPerGroup - byteCount;
         // include the possibly padded last letter
-        maxLetters = (byteCount * 8) / alphabetBits + 1;
+        maxLetters = (byteCount * B.bits) / A.bits + 1;
         byteCount = 0;
       }
 
-      foreach(i;0..maxLetters) {
-        size_t idx = (buffer >> ( (Buf.sizeof * 8) - alphabetBits)) & letterMask;
-        buffer = buffer << alphabetBits;
-        o ~= alphabet[idx];
+      {
+        const minLetterIdx = outLettersPerGroup - maxLetters;
+        size_t i = outLettersPerGroup - 1;
+        while (true)
+        {
+          size_t idx = (buffer >> (i * A.bits)) & A.bitmask;
+          o ~= A[idx];
+          if (i == minLetterIdx) break;
+          i--;
+        }
+
       }
-
       if (padBytes > 0)
-        foreach(i;0..lettersPerGroup-maxLetters) o ~= paddingChar;
+        foreach(i;0..outLettersPerGroup-maxLetters) o ~= A.paddingChar;
 
-      byteIdx += bytesPerGroup;
+      byteIdx += inLettersPerGroup;
     }
     return o.data;
   }
 }
 
 string bytesToBinary(T)(T[] data) {
-  return toByteStringImpl!("01")( data );
+  return toByteStringImpl!(BinaryAlphabet)( data );
 }
 
 string bytesToHex(T)(T[] data)
 {
-  return toByteStringImpl!("0123456789abcdef")( data );
+  return toByteStringImpl!(HexAlphabet)( data );
+}
+
+string parseHexBytes(T)(T[] data)
+{
+  return toByteStringImpl!(ByteAlphabet,HexAlphabet)( toBytes(data) );
 }
 
 string bytesToHexUpper(T)(auto ref T[] data)
 {
-  return toByteStringImpl!("0123456789ABCDEF")( toBytes(data) );
+  return toByteStringImpl!(HexAlphabetUpper)( toBytes(data) );
 }
 
-string bytesToBase64(T)(auto ref T[] data)
+string parseHexBytesUpper(T)(T[] data)
 {
-  return toByteStringImpl!("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/")( toBytes(data) );
+  return toByteStringImpl!(ByteAlphabet,HexAlphabetUpper)( toBytes(data) );
 }
+
+
+string bytesToBase64(T)(T[] data)
+{
+  return toByteStringImpl!(Base64Alphabet)( toBytes(data) );
+}
+
+string parseBase64(T)(T[] data)
+{
+  return toByteStringImpl!(ByteAlphabet, Base64Alphabet)( toBytes(data) );
+}
+
 
 
 
@@ -170,6 +273,7 @@ unittest {
     "ZSBzaG9ydCB2ZWhlbWVuY2Ugb2YgYW55IGNhcm5hbCBwbGVhc3VyZS4=" );
 
 
+
   // padding
   assert( bytesToBase64("any carnal pleasure.") == "YW55IGNhcm5hbCBwbGVhc3VyZS4=" );
   assert( bytesToBase64("any carnal pleasure") == "YW55IGNhcm5hbCBwbGVhc3VyZQ==" );
@@ -183,11 +287,11 @@ unittest {
   assert( bytesToBase64("asure.") == "YXN1cmUu" );
   assert( bytesToBase64("sure.") == "c3VyZS4=" );
 
-  //writefln("%s",  bytesToBinary(cast(ubyte[])([0xf3])));
   assert( bytesToBinary(cast(ubyte[])([0xf3])) == "11110011");
 
-  // check against toHexString
-  foreach(mlen;0..1024) {
+   //check against toHexString
+  foreach(i;0..14) {
+    const mlen = (1 << i) + 1;
     import std.digest.digest;
     import tweednacl.basics : randomBuffer;
     auto msg = randomBuffer(mlen);
@@ -198,4 +302,15 @@ unittest {
 }
 
 
-
+unittest {
+  // check against toHexString
+  foreach(i;0..14) {
+    const mlen = (1 << i) + 1;
+    import std.digest.digest;
+    import tweednacl.basics : randomBuffer;
+    auto msg = randomBuffer(mlen);
+    auto hMsg = toHexString(msg);
+    //writefln("src=%s\ndec=%s\n", hMsg, parseHexBytesUpper(hMsg) );
+    assert( parseHexBytesUpper( hMsg ) == msg );
+  }
+}

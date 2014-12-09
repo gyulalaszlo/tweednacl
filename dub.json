@@ -7,6 +7,25 @@
   "authors": ["Gyula László"],
   "targetPath": "lib",
   "versions": ["TweedNaClLargeBufferTests"],
-  "dependencies": {
+  "dependencies": { },
+  "mainSourceFile": "source/bench.d",
+  "configurations": [
+    {
+      "name": "libtweednacl",
+      "targetType": "library",
+      "versions": ["WithTweedNaCl"],
+      "libs": ["libtweednacl", "sodium"]
+    },
+    {
+      "name": "tweedbench",
+      "targetType": "executable",
+      "lflags": ["$PACKAGE_DIR/vendor/tweetnacl.o"],
+      "libs": ["sodium"]
+    }
+  ],
+  "buildTypes": {
+    "release": {
+      "buildOptions": ["releaseMode", "optimize", "inline", "noBoundsCheck"]
+    }
   }
 }

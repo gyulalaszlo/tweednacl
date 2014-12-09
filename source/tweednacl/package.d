@@ -12,42 +12,8 @@ $(UL
   $(LI $(LINK2 handshake.html , Handshakes ))
   )
 
-$(BIG High-level primitives)
-
-A typical cryptographic library requires several steps to authenticate and
-encrypt a message. Consider, for example, the following typical combination of
-RSA, AES, etc.:
-
-$(OL
-  $(LI Generate a random AES key.)
-  $(LI Use the AES key to encrypt the message.)
-  $(LI Hash the encrypted message using SHA-256.)
-  $(LI Read the sender's RSA secret key from "wire format.")
-  $(LI Use the sender's RSA secret key to sign the hash.)
-  $(LI Read the recipient's RSA public key from wire format.)
-  $(LI Use the recipient's public key to encrypt the AES key, hash, and signature.)
-  $(LI Convert the encrypted key, hash, and signature to wire format.)
-  $(LI Concatenate with the encrypted message. )
-)
-
-Sometimes even more steps are required for storage allocation, error handling,
-etc.
-
-$(UL
-  NaCl provides a simple crypto_box function that does everything in one step.
-  The function takes the sender's secret key, the recipient's public key, and a
-  message, and produces an authenticated ciphertext. All objects are represented
-  in wire format, as sequences of bytes suitable for transmission; the crypto_box
-  function automatically handles all necessary conversions, initializations, etc.
-
-  $(LI Another virtue of NaCl's high-level API is that it is not tied to the
-  traditional hash-sign-encrypt-etc. hybrid structure. NaCl supports much
-  faster message-boxing solutions that reuse Diffie-Hellman shared secrets for
-  any number of messages between the same parties.)
-)
-
 License:
-TweetNaCl is public domain, tweedNaCl is available under the Boost Public License.
+TweetNaCl is public domain, TweeDNaCl is available under the Boost Public License.
 
 */
 /*
