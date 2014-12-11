@@ -26,6 +26,11 @@
   "buildTypes": {
     "release": {
       "buildOptions": ["releaseMode", "optimize", "inline", "noBoundsCheck"]
+    },
+    "docs": {
+      "buildOptions":  ["syntaxOnly"],
+      "dflags": ["-c", "-Dddocs", "$PACKAGE_DIR/tweednacl.ddoc"]
     }
+
   }
 }

@@ -676,6 +676,10 @@ unittest
     testBoxers!4(bobBoxer, aliceBoxer);
 }
 
+/**
+  Helper to set up a forward-secret session with an ephemeral key
+  usin Impl.
+  */
 struct Session(Impl)
 {
   KeyPair!Impl sessionKeyPair;

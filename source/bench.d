@@ -3,6 +3,7 @@ module bench;
 static import std.digest.sha;
 import std.datetime;
 import std.stdio;
+import std.string;
 
 import tweednacl;
 import tweednacl.xsalsa20poly1305;
@@ -15,6 +16,7 @@ enum DefaultC = 1024;
 struct TestData {
   size_t repeats;
   size_t bufferSize;
+  size_t testDataSize = 1024 * 1024;
 }
 
 // A wrapper for std.digest hash types
@@ -92,28 +94,66 @@ extern (C) void randombytes(ubyte* b, ulong l)
 }
 
 
+
+struct Round
+{
+  string label;
+  TestData testData;
+  StopWatch sw;
+
+  this(TestData testData_, string label_="") {
+    testData = testData_;
+    label = label_;
+    sw = StopWatch(AutoStart.yes);
+  }
+
+  ~this() {
+    //sw.peek();
+    traceRound( sw, testData, label );
+  }
+
+}
+
+// pretty-print a round
+void traceRound( ref StopWatch sw, TestData testData, string roundLabel )
+{
+  auto a = sw.peek();
+  //const repeats = testData.testDataSize / testData.bufferSize;
+  //auto perIteration = a / testData.repeats;
+  auto perBytes = a / testData.testDataSize;
+  writefln("%s %sb/%sKb bytes \t%s",
+      roundLabel,
+      testData.bufferSize,
+      testData.testDataSize,
+      perBytes.nsecs );
+}
+
+
 void testHash(H)( immutable TestData testData, string label="")
 {
   ubyte[] d;
-  d.length = testData.bufferSize;
+  d.length = testData.testDataSize;
 
   unSafeRandomBytes( d );
-  auto sw = StopWatch(AutoStart.yes);
+  //auto sw = StopWatch(AutoStart.yes);
 
+  const bufSize = testData.bufferSize;
+  const repeats = testData.testDataSize / testData.bufferSize;
+  auto r = Round(testData, format("%s %s", primitiveName!H, label));
   H.Value h;
-  foreach(i;0..testData.repeats)
+  foreach(i;0..repeats)
   {
-    H.hash(h,d);
+    H.hash(h,d[i*bufSize..(i+1)*bufSize]);
   }
 
-  auto a = sw.peek();
-  auto perIteration = a / testData.repeats;
-  auto perBytes = perIteration / testData.bufferSize;
-  writefln("%s %s %s bytes\t%s",
-      primitiveName!H,
-      label,
-      testData.bufferSize,
-      perBytes.nsecs );
+  //auto a = sw.peek();
+  //auto perIteration = a / testData.repeats;
+  //auto perBytes = perIteration / testData.bufferSize;
+  //writefln("%s %s %s bytes\t%s",
+      //primitiveName!H,
+      //label,
+      //testData.bufferSize,
+      //perBytes.nsecs );
 }
 
 
@@ -124,10 +164,10 @@ void testSecretBox(C)( immutable TestData testData, string label="")
   ubyte[] d, o;
   C.Key k;
   C.Nonce n;
-  d.length = testData.bufferSize + C.ZeroBytes;
+  d.length = testData.testDataSize;// + C.ZeroBytes;
   unSafeRandomBytes( d );
   d[0..C.ZeroBytes] = 0;
-  o.length = testData.bufferSize + C.ZeroBytes;
+  o.length = testData.testDataSize;// + C.ZeroBytes;
 
   // key
   unSafeRandomBytes( k );
@@ -135,35 +175,28 @@ void testSecretBox(C)( immutable TestData testData, string label="")
   // nonce
   unSafeRandomBytes( n );
 
-  void traceRound( ref StopWatch sw, TestData testData, string roundLabel )
-  {
-    auto a = sw.peek();
-    auto perIteration = a / testData.repeats;
-    auto perBytes = perIteration / testData.bufferSize;
-    writefln("%s %s %s bytes %s\t%s",
-        primitiveName!C,
-        label,
-        testData.bufferSize,
-        roundLabel,
-        perBytes.nsecs );
-  }
 
-
+  const bufSize = testData.bufferSize + C.ZeroBytes;
+  const repeats = testData.testDataSize / bufSize;
   {
-    auto sw = StopWatch(AutoStart.yes);
-    foreach(i;0..testData.repeats)
+    auto r = Round(testData, format("%s %s(box)", primitiveName!C, label));
+    //auto r = Round(testData, format("%s(box)", label));
+    //auto sw = StopWatch(AutoStart.yes);
+    foreach(i;0..repeats)
     {
-      C.box( o, d, n, k );
+      C.box( o[i*bufSize..(i+1)*bufSize], d[i*bufSize..(i+1)*bufSize], n, k );
     }
-    traceRound( sw, testData, "box" );
+    //traceRound( sw, testData, format("%s(box)", label) );
   }
   {
-    auto sw = StopWatch(AutoStart.yes);
-    foreach(i;0..testData.repeats)
+    auto r = Round(testData, format("%s %s(boxOpen)", primitiveName!C, label));
+    //auto r = Round(testData, format("%s(boxOpen)", label));
+    //auto sw = StopWatch(AutoStart.yes);
+    foreach(i;0..repeats)
     {
-      C.boxOpen( d, o, n, k );
+      C.boxOpen( d[i*bufSize..(i+1)*bufSize], o[i*bufSize..(i+1)*bufSize], n, k );
     }
-    traceRound( sw, testData, "open" );
+    //traceRound( sw, testData, format("%s(box)", label) );
   }
 }
 
