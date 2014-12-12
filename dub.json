@@ -5,22 +5,32 @@
   "copyright": "Copyright © 2014, Gyula László",
   "license": "BSL-1.0",
   "authors": ["Gyula László"],
-  "targetPath": "lib",
-  "versions": ["TweedNaClLargeBufferTests"],
+  "versions": [
+    "TweedNaClLargeBufferTests",
+    "TweedNaClUseStdSHA512",
+  ],
   "dependencies": { },
-  "mainSourceFile": "source/bench.d",
   "configurations": [
     {
       "name": "libtweednacl",
+      "targetPath": "lib",
       "targetType": "library",
       "versions": ["WithTweedNaCl"],
-      "libs": ["libtweednacl", "sodium"]
+      "excludedSourceFiles": [
+        "source/bench.d"
+      ]
     },
     {
       "name": "tweedbench",
+      "targetPath": "bin",
       "targetType": "executable",
+      "mainSourceFile": "source/bench.d",
       "lflags": ["$PACKAGE_DIR/vendor/tweetnacl.o"],
-      "libs": ["sodium"]
+      "libs": ["sodium"],
+      "versions": [
+        "TweedNaClUseTweetNaCl",
+        "TweedNaClUseNaCl"
+      ]
     }
   ],
   "buildTypes": {

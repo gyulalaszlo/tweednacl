@@ -181,7 +181,7 @@ mixin template HashAlgorithm(size_t bytes)
 
 mixin template SHA512Algorithm( string implName, string versionStr = "-")
 {
-  mixin NaClPrimitive!("sha512", implName, versionStr );
+  mixin NaClPrimitive!("sha512", "crypto_hash/sha512/" ~ implName, versionStr );
   mixin HashAlgorithm!( 64 );
 }
 
@@ -235,21 +235,35 @@ mixin template CryptoBoxAlgorithm( size_t zero, size_t boxZero, size_t beforeNmB
   alias Beforenm = Key;
 }
 
+mixin template SigningAlgorithm( size_t bytes, size_t seedBytes)
+{
+  enum Bytes = bytes;
+  enum SeedBytes = seedBytes;
+
+  alias Signature = ubyte[bytes];
+}
+
 
 mixin template XSalsa20Poly1305Implementation( string implName, string versionStr = "-")
 {
-  mixin NaClPrimitive!("xsalsa20poly1305", implName, versionStr );
+  mixin NaClPrimitive!("xsalsa20poly1305", "crypto_secretbox/xsalsa20poly1305/" ~  implName, versionStr );
   mixin SecretBoxAlgorithm!( 32, 16, 32, 24 );
 }
 
-mixin template Curve25519XSalsa20Poly1305Implementation( 
+mixin template Curve25519XSalsa20Poly1305Implementation(
     string implName, string versionStr = "-")
 {
-  mixin NaClPrimitive!("curve25519xsalsa20poly1305", implName, versionStr );
+  mixin NaClPrimitive!("curve25519xsalsa20poly1305", "crypto_box/curve25519xsalsa20poly1305/" ~  implName, versionStr );
   mixin CryptoBoxAlgorithm!( 32, 16, 32, 24, 32, 32 );
 }
 
 
+mixin template Ed25519Implementation( string implName, string versionStr = "-" )
+{
+  mixin NaClPrimitive!("ed25519", "crypto_sign/ed25519/" ~ implName, versionStr );
+  mixin SigningAlgorithm!( 64, 32 );
+  mixin PublicKeyAlgorithm!( 32, 64 );
+}
 
 
 
@@ -288,3 +302,267 @@ enum isHash(Impl) = isCryptoPrimitive!Impl
 
 
 
+version (TweedNaClUseStdSHA512)
+{
+  static import std.digest.sha;
+
+  // A wrapper for std.digest hash types
+  struct StdDigest(Digest)
+  {
+    mixin SHA512Algorithm!("std");
+
+    static pure nothrow @safe
+    void hash( ref Value output, const(ubyte)[] m )
+    {
+      output = std.digest.digest.digest!Digest( m );
+    }
+  }
+
+  alias StdSHA512 = StdDigest!(std.digest.sha.SHA512);
+}
+
+
+version (TweedNaClUseTweetNaCl)
+{
+  extern (C)
+  {
+    int crypto_hash_sha512_tweet(ubyte*,const ubyte*, ulong);
+  }
+
+  extern (C) int crypto_secretbox_xsalsa20poly1305_tweet(ubyte *,const ubyte *,ulong,const ubyte *,const ubyte *);
+  extern (C) int crypto_secretbox_xsalsa20poly1305_tweet_open(ubyte *,const ubyte *,ulong,const ubyte *,const ubyte *);
+
+  extern (C) int crypto_box_curve25519xsalsa20poly1305_tweet(ubyte *,const ubyte *,ulong,const ubyte *,const ubyte *,const ubyte *);
+  extern (C) int crypto_box_curve25519xsalsa20poly1305_tweet_open(ubyte *,const ubyte *,ulong,const ubyte *,const ubyte *,const ubyte *);
+  extern (C) int crypto_box_curve25519xsalsa20poly1305_tweet_keypair(ubyte *,ubyte *);
+  extern (C) int crypto_box_curve25519xsalsa20poly1305_tweet_beforenm(ubyte *,const ubyte *,const ubyte *);
+  extern (C) int crypto_box_curve25519xsalsa20poly1305_tweet_afternm(ubyte *,const ubyte *,ulong,const ubyte *,const ubyte *);
+  extern (C) int crypto_box_curve25519xsalsa20poly1305_tweet_open_afternm(ubyte *,const ubyte *,ulong,const ubyte *,const ubyte *);
+
+  extern (C) int crypto_sign_ed25519_tweet(ubyte *,ulong *,const ubyte *,ulong,const ubyte *);
+  extern (C) int crypto_sign_ed25519_tweet_open(ubyte *,ulong *,const ubyte *,ulong,const ubyte *);
+  extern (C) int crypto_sign_ed25519_tweet_keypair(ubyte *,ubyte *);
+
+  version(TweedNaClUseNaCl)
+  {
+    // Sodium helps us here
+    extern (C) void randombytes_buf(void* buf, const size_t size);
+    extern (C) void randombytes(ubyte* b, ulong l)
+    {
+      randombytes_buf(b, l);
+    }
+  }
+  else
+  {
+    extern (C) void randombytes(ubyte* b, ulong l)
+    {
+      import tweednacl.basics : safeRandomBytes;
+      safeRandomBytes(b[0..l], l);
+    }
+  }
+
+  alias TweetSHA512 = NaClSHA512!(
+      "tweet",
+      crypto_hash_sha512_tweet
+      );
+
+  alias TweetXSalsa20Poly1305 = NaClXSalsa20Poly1305!(
+      "tweet",
+      crypto_secretbox_xsalsa20poly1305_tweet,
+      crypto_secretbox_xsalsa20poly1305_tweet_open,
+      );
+
+  alias TweetCurve25519XSalsa20Poly1305 = NaClCurve25519XSalsa20Poly1305!(
+      "tweet",
+      crypto_box_curve25519xsalsa20poly1305_tweet,
+      crypto_box_curve25519xsalsa20poly1305_tweet_open,
+      crypto_box_curve25519xsalsa20poly1305_tweet_keypair,
+      crypto_box_curve25519xsalsa20poly1305_tweet_beforenm,
+      crypto_box_curve25519xsalsa20poly1305_tweet_afternm,
+      crypto_box_curve25519xsalsa20poly1305_tweet_open_afternm,
+      );
+
+  alias TweetEd25519 = NaClEd25519!(
+      "tweet",
+      crypto_sign_ed25519_tweet,
+      crypto_sign_ed25519_tweet_open,
+      crypto_sign_ed25519_tweet_keypair,
+      );
+
+
+}
+
+
+version (TweedNaClUseNaCl)
+{
+  extern (C) int crypto_hash_sha512(ubyte*,const ubyte*, ulong);
+  extern (C) int crypto_secretbox_xsalsa20poly1305(ubyte *,const ubyte *,ulong,const ubyte *,const ubyte *);
+  extern (C) int crypto_secretbox_xsalsa20poly1305_open(ubyte *,const ubyte *,ulong,const ubyte *,const ubyte *);
+
+  extern (C) int crypto_box_curve25519xsalsa20poly1305(ubyte *,const ubyte *,ulong,const ubyte *,const ubyte *,const ubyte *);
+  extern (C) int crypto_box_curve25519xsalsa20poly1305_open(ubyte *,const ubyte *,ulong,const ubyte *,const ubyte *,const ubyte *);
+  extern (C) int crypto_box_curve25519xsalsa20poly1305_keypair(ubyte *,ubyte *);
+  extern (C) int crypto_box_curve25519xsalsa20poly1305_beforenm(ubyte *,const ubyte *,const ubyte *);
+  extern (C) int crypto_box_curve25519xsalsa20poly1305_afternm(ubyte *,const ubyte *,ulong,const ubyte *,const ubyte *);
+  extern (C) int crypto_box_curve25519xsalsa20poly1305_open_afternm(ubyte *,const ubyte *,ulong,const ubyte *,const ubyte *);
+
+  extern (C) int crypto_sign_ed25519(ubyte *,ulong *,const ubyte *,ulong,const ubyte *);
+  extern (C) int crypto_sign_ed25519_open(ubyte *,ulong *,const ubyte *,ulong,const ubyte *);
+  extern (C) int crypto_sign_ed25519_keypair(ubyte *,ubyte *);
+
+  alias SodiumSHA512 = NaClSHA512!(
+      "sodium",
+      crypto_hash_sha512
+      );
+
+  alias SodiumXSalsa20Poly1305 = NaClXSalsa20Poly1305!(
+      "sodium",
+      crypto_secretbox_xsalsa20poly1305,
+      crypto_secretbox_xsalsa20poly1305_open,
+      );
+
+  alias SodiumCurve25519XSalsa20Poly1305 = NaClCurve25519XSalsa20Poly1305!(
+      "sodium",
+      crypto_box_curve25519xsalsa20poly1305,
+      crypto_box_curve25519xsalsa20poly1305_open,
+      crypto_box_curve25519xsalsa20poly1305_keypair,
+      crypto_box_curve25519xsalsa20poly1305_beforenm,
+      crypto_box_curve25519xsalsa20poly1305_afternm,
+      crypto_box_curve25519xsalsa20poly1305_open_afternm,
+      );
+
+  alias SodiumEd25519 = NaClEd25519!(
+      "sodium",
+      crypto_sign_ed25519,
+      crypto_sign_ed25519_open,
+      crypto_sign_ed25519_keypair
+      );
+
+}
+
+/**
+  Wrapper for using C-based NaCl Primitives.
+  */
+struct NaClSHA512(string implName, alias crypto_hash)
+{
+  mixin SHA512Algorithm!(implName);
+
+  static @system
+  void hash( ref Value output, const(ubyte)[] m )
+  {
+    crypto_hash( &output[0], &m[0], m.length );
+  }
+}
+
+
+/** ditto */
+struct NaClXSalsa20Poly1305(string implName, alias crypto_box, alias crypto_box_open) {
+  mixin XSalsa20Poly1305Implementation!(implName);
+
+
+  static @system
+  bool box( ubyte[] c,const ubyte[] m, ref const Nonce n, ref const Key k)
+  {
+    return crypto_box(
+        &c[0], &m[0], m.length, &n[0], &k[0]
+        ) == 0;
+  }
+
+  static @system
+  bool open( ubyte[] m, const ubyte[] c, ref const Nonce n, ref const Key k)
+  {
+    return crypto_box_open(
+        &m[0], &c[0], c.length, &n[0], &k[0]
+        ) == 0;
+  }
+
+}
+
+/** ditto */
+struct NaClCurve25519XSalsa20Poly1305(
+    string implName,
+    alias crypto_box,
+    alias crypto_box_open,
+    alias crypto_box_keypair,
+    alias crypto_box_beforenm,
+    alias crypto_box_afternm,
+    alias crypto_box_open_afternm,
+
+    ) {
+
+  mixin Curve25519XSalsa20Poly1305Implementation!(implName);
+
+
+  static @system
+  int keypair(alias safeRnd=safeRandomBytes)( ref PublicKey pk, ref SecretKey sk)
+  {
+    return crypto_box_keypair( &pk[0], &sk[0] );
+  }
+
+  static @system
+  bool box( ubyte[] cypherText,const ubyte[] m, ref const Nonce nonce, ref const PublicKey recvPk,
+      ref const SecretKey senderSk)
+  {
+    return crypto_box( &cypherText[0], &m[0], m.length, &nonce[0], &recvPk[0], &senderSk[0] ) == 0;
+  }
+
+  static @system
+  bool open( ubyte[] m,const ubyte[] cypherText, ref const Nonce nonce, ref const PublicKey senderPk,
+      ref const SecretKey recvSk)
+  {
+    return crypto_box_open( &m[0], &cypherText[0], cypherText.length, &nonce[0], &senderPk[0], &recvSk[0] ) == 0;
+  }
+
+
+  static @system
+  int beforenm( ref Beforenm k, ref const PublicKey pk, ref const SecretKey sk)
+  {
+    return crypto_box_beforenm( &k[0], &pk[0], &sk[0] );
+  }
+
+  static @system
+  bool afternm( ubyte[] cypherText, const ubyte[] m, ref const Nonce nonce,
+      ref const Beforenm k)
+  {
+    return crypto_box_afternm(&cypherText[0], &m[0], m.length, &nonce[0], &k[0]) == 0;
+  }
+
+  static @system
+  bool openAfternm( ubyte[] m, const ubyte[] cypherText, ref const Nonce nonce,
+      ref const Beforenm k)
+  {
+    return crypto_box_open_afternm(&m[0], &cypherText[0], cypherText.length, &nonce[0], &k[0]) == 0;
+  }
+}
+
+/** ditto */
+struct NaClEd25519(
+    string implName,
+    alias crypto_sign,
+    alias crypto_sign_open,
+    alias crypto_sign_keypair,
+    ) {
+
+  mixin Ed25519Implementation!(implName);
+
+
+  static @system
+  int keypair(alias safeRnd=safeRandomBytes)( ref PublicKey pk, ref SecretKey sk)
+  {
+    return crypto_sign_keypair( &pk[0], &sk[0] );
+  }
+
+  static @system
+  bool sign(ubyte[] sm, out size_t smlen, const ubyte[] m, ref const SecretKey sk)
+  {
+    return crypto_sign(&sm[0], &smlen, &m[0], m.length, &sk[0]) == 0;
+  }
+
+  static @system
+  bool open(ubyte[] m, ref size_t mlen, const ubyte[] sm, ref const PublicKey pk)
+  {
+    return crypto_sign_open(&m[0], &mlen, &sm[0], sm.length, &pk[0]) == 0;
+  }
+
+
+}

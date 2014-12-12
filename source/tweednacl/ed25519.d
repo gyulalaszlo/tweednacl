@@ -22,15 +22,16 @@ import tweednacl.sha512 : SHA512;
 
 struct Ed25519
 {
-  enum Primitive = CryptoPrimitive("ed25519",
-      "crypto_sign/ed25519/tweet" );
+  mixin Ed25519Implementation!("D");
+  //enum Primitive = CryptoPrimitive("ed25519",
+      //"crypto_sign/ed25519/tweet" );
 
-  enum Bytes = 64;
-  enum SeedBytes = 32;
+  //enum Bytes = 64;
+  //enum SeedBytes = 32;
 
-  alias PublicKey = ubyte[32];
-  alias SecretKey = ubyte[64];
-  alias Signature = ubyte[Bytes];
+  //alias PublicKey = ubyte[32];
+  //alias SecretKey = ubyte[64];
+  //alias Signature = ubyte[Bytes];
 
   private alias Hash = SHA512;
   /**
@@ -111,7 +112,8 @@ struct Ed25519
     Hash.hash(h,sm[0..n+64]);
     reduce(h);
 
-    foreach(i;0..64) x[i] = 0;
+  // D arrays are auto-nulled
+    //foreach(i;0..64) x[i] = 0;
     foreach(i;0..32) x[i] = ulong(r[i]);
     foreach(i;0..32) foreach(j;0..32) x[i+j] += h[i] * ulong(d[j]);
     modL(sm[32..64],x);
@@ -135,13 +137,13 @@ struct Ed25519
 
     $(BIG In-place verification)
 
-    The $(D signOpenInPlace) method tries to open the signed message without
+    The $(D openInPlace) method tries to open the signed message without
     copying the signed message. When calling this method, the message will remain
     in the [Ed25519.Bytes..$] range.
 
      */
   pure nothrow @safe @nogc
-  static bool signOpen(ubyte[] m, ref size_t mlen, const ubyte[] sm,
+  static bool open(ubyte[] m, ref size_t mlen, const ubyte[] sm,
       ref const PublicKey pk)
   in {
     assert( m.length >= sm.length );
@@ -188,16 +190,16 @@ struct Ed25519
 
   /** ditto */
   pure nothrow @safe @nogc
-  static bool signOpenInPlace(ubyte[] m, ref size_t mlen, ref const PublicKey pk)
+  static bool openInPlace(ubyte[] m, ref size_t mlen, ref const PublicKey pk)
   {
-    return signOpen(m, mlen, m, pk );
+    return open(m, mlen, m, pk );
   }
 }
 
 
 alias crypto_sign_keypair = Ed25519.keypair;
 alias crypto_sign = Ed25519.sign;
-alias crypto_sign_open = Ed25519.signOpen;
+alias crypto_sign_open = Ed25519.open;
 
 private:
 
@@ -603,14 +605,14 @@ unittest
     randomBuffer(msg[0..mlen]);
 
     assert( Ed25519.sign( signedMsg, signedMsgLen, msg,  sk ));
-    assert( Ed25519.signOpenInPlace( signedMsg, msgLen, pk ));
+    assert( Ed25519.openInPlace( signedMsg, msgLen, pk ));
     assert( msgLen == mlen );
 
     if (mlen == 0) continue;
     foreach(j;0..3)
     {
       forgeBuffer( signedMsg, j+1 );
-      assert( !Ed25519.signOpenInPlace( signedMsg, msgLen,  pk ) );
+      assert( !Ed25519.openInPlace( signedMsg, msgLen,  pk ) );
     }
   }
 }

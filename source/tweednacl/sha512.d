@@ -34,7 +34,7 @@ module tweednacl.sha512;
 struct SHA512 {
 
   enum Primitive = "sha512";
-  enum Implementation = "crypto_hashblocks/sha512/tweet";
+  enum Implementation = "crypto_hash/sha512/D";
   enum Version = "-";
 
   alias hash = crypto_hash;
@@ -48,7 +48,7 @@ struct SHA512 {
 struct SHA512Hashblocks {
 
   enum Primitive = "sha512";
-  enum Implementation = "crypto_hash/sha512/tweet";
+  enum Implementation = "crypto_hashblocks/sha512/D";
   enum Version = "-";
 
   enum StateBytes = 64;

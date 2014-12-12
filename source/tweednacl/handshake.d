@@ -845,8 +845,8 @@ template HandshakeSigner(SignPrimitive, alias safeRnd=safeRandomBytes)
     {
       //auto o = zeroOut(m);
       size_t mlen;
-      //if (!SignPrimitive.signOpenInPlace( o, mlen, m, otherPartyPublicKey ))
-      if (!SignPrimitive.signOpenInPlace( m, mlen, otherPartyPublicKey ))
+      //if (!SignPrimitive.openInPlace( o, mlen, m, otherPartyPublicKey ))
+      if (!SignPrimitive.openInPlace( m, mlen, otherPartyPublicKey ))
         throw new HandshakeError("Handshake signature mismatch");
 
       auto signRandomData = cast(Data*)(&m[SignPrimitive.Bytes]);

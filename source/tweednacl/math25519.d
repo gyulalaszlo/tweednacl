@@ -87,10 +87,18 @@ pure nothrow @safe @nogc void Z(ref gf o,ref const gf a,ref const gf b)
   foreach(i;0..16) o[i]=a[i]-b[i];
 }
 
+/*
+   Additions and subtractions do not have to worry about carries or modular
+   reduction; they simply turn into a loop that performs 16 cofficient
+   additions or subtractions.  Multiplication performs simple "operand
+   scanning" schoolbook multiplication in two nested loops. We then reduce
+   modulo 2 ^ 256 - 38
+*/
 pure nothrow @safe @nogc void M(ref gf o,ref const gf a,ref const gf b)
 {
   long t[31];
-  foreach(i;0..31) t[i]=0;
+  // D arrays are auto-nulled
+  // foreach(i;0..31) t[i]=0;
   foreach(i;0..16) foreach(j;0..16) t[i+j]+=a[i]*b[j];
   foreach(i;0..15) t[i]+=38*t[i+16];
   foreach(i;0..16) o[i]=t[i];

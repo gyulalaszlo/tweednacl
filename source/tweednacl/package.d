@@ -191,7 +191,7 @@ body {
   //ubyte[] output;
   //output.length = sm.length;
   size_t outputLen;
-  if (!Impl.signOpen( output, outputLen, sm, pk ))
+  if (!Impl.open( output, outputLen, sm, pk ))
     throw new BadSignatureError();
   //output.length = outputLen;
   return output[0..outputLen];

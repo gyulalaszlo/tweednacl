@@ -32,132 +32,116 @@ import tweednacl.xsalsa20 : XSalsa20;
 import tweednacl.nacl;
 
 struct XSalsa20Poly1305 {
-  mixin XSalsa20Poly1305Implementation!"crypto_secretbox/xsalsa20poly1305/tweet/d";
-  //enum Info = CryptoPrimitive( "xsalsa20poly1305",
-      //"crypto_secretbox/xsalsa20poly1305/tweet/d");
+  mixin XSalsa20Poly1305Implementation!"crypto_secretbox/xsalsa20poly1305/D";
 
-  //enum ZeroBytes = 32;
-  //enum BoxZeroBytes = 16;
-
-  alias secretbox = crypto_secretbox;
-  alias secretboxOpen = crypto_secretbox_open;
-
-  //alias Key = ubyte[32];
-  //alias Nonce = ubyte[24];
-
-  // Box interface
-
-  alias box = crypto_secretbox;
-  alias boxOpen = crypto_secretbox_open;
-
-  alias afternm = crypto_secretbox;
-  alias openAfternm = crypto_secretbox_open;
+  alias afternm = box;
+  alias openAfternm = open;
 
   alias Beforenm = Key;
+  /**
+
+    The crypto_secretbox function encrypts and authenticates a message m[0], m[1],
+    ..., m[mlen-1] using a secret key k[0], ..., k[crypto_secretbox_KEYBYTES-1] and
+    a nonce n[0], n[1], ..., n[crypto_secretbox_NONCEBYTES-1]. The crypto_secretbox
+    function puts the ciphertext into c[0], c[1], ..., c[mlen-1]. It then returns
+    0.
+
+WARNING: $(I Messages in the C NaCl API are 0-padded versions of messages in the
+C++ NaCl API. Specifically: The caller must ensure, before calling the C NaCl
+crypto_secretbox function, that the first crypto_secretbox_ZEROBYTES bytes of
+the message m are all 0. Typical higher-level applications will work with the
+remaining bytes of the message; note, however, that mlen counts all of the
+bytes, including the bytes required to be 0.)
+
+---
+| 0x00                     | 0x00                     | PlainText
++---+-----+----------------+---+-----+----------------+---+-----+--------------------+
+| 0 | ... | BoxZeroBytes-1 | 0 | ... | BoxZeroBytes-1 | 0 | ... | PlainText.length-1 |
++---+-----+----------------+---+-----+----------------+---+-----+--------------------+
+| 0                        | BoxZeroBytes             | ZeroBytes
+---
+
+Similarly, ciphertexts in the C NaCl API are 0-padded versions of messages in
+the C++ NaCl API. Specifically: The crypto_secretbox function ensures that the
+first crypto_secretbox_BOXZEROBYTES bytes of the ciphertext c are all 0.
+
+---
+| 0x00                             | CypherText + Auth
++---+---+---+-----+----------------+---+---+---+-----+------------+
+| 0 | 1 | 2 | ... | BoxZeroBytes-1 | 0 | 1 | 2 | ... | c.length-1 |
++---+---+---+-----+----------------+---+---+---+-----+------------+
+| 0                                | BoxZeroBytes
+---
+
+   */
+  pure nothrow @safe @nogc
+  static  bool box(
+        ubyte[] c,const ubyte[] m,
+        ref const XSalsa20Poly1305.Nonce n,
+        ref const XSalsa20Poly1305.Key k)
+    {
+      immutable d = m.length;
+      if (d < XSalsa20Poly1305.ZeroBytes) return false;
+      XSalsa20.streamXor(c,m,d,n,k);
+      Poly1305.onetimeauth(c[16..32],c[32..$],c[0..32]);
+      foreach(i;0..XSalsa20Poly1305.BoxZeroBytes) c[i] = 0;
+      return true;
+    }
+
+  /**
+
+    The crypto_secretbox_open function verifies and decrypts a ciphertext c[0],
+    c[1], ..., c[clen-1] using a secret key k[0], k[1], ...,
+    k[crypto_secretbox_KEYBYTES-1] and a nonce n[0], ...,
+    n[crypto_secretbox_NONCEBYTES-1]. The crypto_secretbox_open function puts the
+    plaintext into m[0], m[1], ..., m[clen-1]. It then returns 0.
+
+    If the ciphertext fails verification, crypto_secretbox_open instead returns -1,
+    possibly after modifying m[0], m[1], etc.
+
+    The caller must ensure, before calling the crypto_secretbox_open function, that
+    the first crypto_secretbox_BOXZEROBYTES bytes of the ciphertext c are all 0.
+
+    ---
+    | 0x00                             | CypherText + Auth
+    +---+---+---+-----+----------------+---+---+---+-----+------------+
+    | 0 | 1 | 2 | ... | BoxZeroBytes-1 | 0 | 1 | 2 | ... | c.length-1 |
+    +---+---+---+-----+----------------+---+---+---+-----+------------+
+    | 0                                | BoxZeroBytes
+    ---
+
+    The crypto_secretbox_open function ensures (in case of success) that the first
+    crypto_secretbox_ZEROBYTES bytes of the plaintext m are all 0.
+
+    ---
+    | 0x00                          | PlainText
+    +---+---+---+-----+-------------+---+---+---+-----+------------+
+    | 0 | 1 | 2 | ... | ZeroBytes-1 | 0 | 1 | 2 | ... | m.length-1 |
+    +---+---+---+-----+-------------+---+---+---+-----+------------+
+    | 0                             | ZeroBytes
+    ---
+
+   */
+  pure nothrow @safe @nogc
+    static bool open(
+        ubyte[] m, const ubyte[] c,
+        ref const XSalsa20Poly1305.Nonce n,
+        ref const XSalsa20Poly1305.Key k)
+    in {
+      foreach(i;0..XSalsa20Poly1305.BoxZeroBytes) assert( c[i] == 0 );
+    }
+  body {
+    immutable d = c.length;
+    if (d < XSalsa20Poly1305.ZeroBytes) return false;
+    ubyte x[32];
+    XSalsa20.stream(x,32,n,k);
+    if (!Poly1305.onetimeauthVerify(c[16..32], c[32..d],x)) return false;
+    XSalsa20.streamXor(m,c,d,n,k);
+    foreach(i;0..XSalsa20Poly1305.ZeroBytes) m[i] = 0;
+    return true;
+  }
+
 }
-/**
-
-  The crypto_secretbox function encrypts and authenticates a message m[0], m[1],
-  ..., m[mlen-1] using a secret key k[0], ..., k[crypto_secretbox_KEYBYTES-1] and
-  a nonce n[0], n[1], ..., n[crypto_secretbox_NONCEBYTES-1]. The crypto_secretbox
-  function puts the ciphertext into c[0], c[1], ..., c[mlen-1]. It then returns
-  0.
-
-  WARNING: $(I Messages in the C NaCl API are 0-padded versions of messages in the
-  C++ NaCl API. Specifically: The caller must ensure, before calling the C NaCl
-  crypto_secretbox function, that the first crypto_secretbox_ZEROBYTES bytes of
-  the message m are all 0. Typical higher-level applications will work with the
-  remaining bytes of the message; note, however, that mlen counts all of the
-  bytes, including the bytes required to be 0.)
-
-  ---
-  | 0x00                     | 0x00                     | PlainText
-  +---+-----+----------------+---+-----+----------------+---+-----+--------------------+
-  | 0 | ... | BoxZeroBytes-1 | 0 | ... | BoxZeroBytes-1 | 0 | ... | PlainText.length-1 |
-  +---+-----+----------------+---+-----+----------------+---+-----+--------------------+
-  | 0                        | BoxZeroBytes             | ZeroBytes
-  ---
-
-  Similarly, ciphertexts in the C NaCl API are 0-padded versions of messages in
-  the C++ NaCl API. Specifically: The crypto_secretbox function ensures that the
-  first crypto_secretbox_BOXZEROBYTES bytes of the ciphertext c are all 0.
-
-  ---
-  | 0x00                             | CypherText + Auth
-  +---+---+---+-----+----------------+---+---+---+-----+------------+
-  | 0 | 1 | 2 | ... | BoxZeroBytes-1 | 0 | 1 | 2 | ... | c.length-1 |
-  +---+---+---+-----+----------------+---+---+---+-----+------------+
-  | 0                                | BoxZeroBytes
-  ---
-
-*/
-pure nothrow @safe @nogc
-bool crypto_secretbox(
-    ubyte[] c,const ubyte[] m,
-    ref const XSalsa20Poly1305.Nonce n,
-    ref const XSalsa20Poly1305.Key k)
-{
-  immutable d = m.length;
-  if (d < XSalsa20Poly1305.ZeroBytes) return false;
-  XSalsa20.streamXor(c,m,d,n,k);
-  Poly1305.onetimeauth(c[16..32],c[32..$],c[0..32]);
-  foreach(i;0..XSalsa20Poly1305.BoxZeroBytes) c[i] = 0;
-  return true;
-}
-
-/**
-
-  The crypto_secretbox_open function verifies and decrypts a ciphertext c[0],
-  c[1], ..., c[clen-1] using a secret key k[0], k[1], ...,
-  k[crypto_secretbox_KEYBYTES-1] and a nonce n[0], ...,
-  n[crypto_secretbox_NONCEBYTES-1]. The crypto_secretbox_open function puts the
-  plaintext into m[0], m[1], ..., m[clen-1]. It then returns 0.
-
-  If the ciphertext fails verification, crypto_secretbox_open instead returns -1,
-  possibly after modifying m[0], m[1], etc.
-
-  The caller must ensure, before calling the crypto_secretbox_open function, that
-  the first crypto_secretbox_BOXZEROBYTES bytes of the ciphertext c are all 0.
-
-  ---
-  | 0x00                             | CypherText + Auth
-  +---+---+---+-----+----------------+---+---+---+-----+------------+
-  | 0 | 1 | 2 | ... | BoxZeroBytes-1 | 0 | 1 | 2 | ... | c.length-1 |
-  +---+---+---+-----+----------------+---+---+---+-----+------------+
-  | 0                                | BoxZeroBytes
-  ---
-
-  The crypto_secretbox_open function ensures (in case of success) that the first
-  crypto_secretbox_ZEROBYTES bytes of the plaintext m are all 0.
-
-  ---
-  | 0x00                          | PlainText
-  +---+---+---+-----+-------------+---+---+---+-----+------------+
-  | 0 | 1 | 2 | ... | ZeroBytes-1 | 0 | 1 | 2 | ... | m.length-1 |
-  +---+---+---+-----+-------------+---+---+---+-----+------------+
-  | 0                             | ZeroBytes
-  ---
-
-  */
-pure nothrow @safe @nogc
-bool crypto_secretbox_open(
-    ubyte[] m, const ubyte[] c,
-    ref const XSalsa20Poly1305.Nonce n,
-    ref const XSalsa20Poly1305.Key k)
-in {
-  foreach(i;0..XSalsa20Poly1305.BoxZeroBytes) assert( c[i] == 0 );
-}
-body {
-  immutable d = c.length;
-  if (d < XSalsa20Poly1305.ZeroBytes) return false;
-  ubyte x[32];
-  XSalsa20.stream(x,32,n,k);
-  if (!Poly1305.onetimeauthVerify(c[16..32], c[32..d],x)) return false;
-  XSalsa20.streamXor(m,c,d,n,k);
-  foreach(i;0..XSalsa20Poly1305.ZeroBytes) m[i] = 0;
-  return true;
-}
-
 
 unittest {
 
@@ -202,16 +186,16 @@ unittest {
       0x4c, 0xb4, 0x5a, 0x74, 0xe3, 0x55, 0xa5 ];
   ubyte c[163];
 
-  crypto_secretbox(c, m, nonce, firstkey);
+  XSalsa20Poly1305.box(c, m, nonce, firstkey);
   assert( c[16..163] == cRes[16..163]);
 
 
   ubyte m2[163];
 
-  assert( crypto_secretbox_open(m2, c, nonce, firstkey) );
+  assert( XSalsa20Poly1305.open(m2, c, nonce, firstkey) );
   assert( m[32..163] == m2[32..163]);
   m2[] = 0;
-  assert( crypto_secretbox_open(m2, cRes, nonce, firstkey) );
+  assert( XSalsa20Poly1305.open(m2, cRes, nonce, firstkey) );
   assert( m[32..163] == m2[32..163]);
 }
 
@@ -242,8 +226,8 @@ unittest
       auto currentC = c[0..msgBlockLen];
       currentC[] = 0;
 
-      Impl.secretbox( currentC, m[0..msgBlockLen], n, k );
-      assert(Impl.secretboxOpen(m2[0..msgBlockLen], currentC[], n, k),
+      Impl.box( currentC, m[0..msgBlockLen], n, k );
+      assert(Impl.open(m2[0..msgBlockLen], currentC[], n, k),
           "ciphertext fails verification");
       assert( m2[0..msgBlockLen] == m[0..msgBlockLen] );
 
@@ -257,7 +241,7 @@ unittest
         // (it seems to work but the docs say they should not)
         c[0..Impl.ZeroBytes] = 0;
 
-        if(Impl.secretboxOpen(m2[0..msgBlockLen], currentC, n, k)) {
+        if(Impl.open(m2[0..msgBlockLen], currentC, n, k)) {
           assert( m2[0..msgBlockLen] == m[0..msgBlockLen], "foregery" );
         } else {
           ++caught;

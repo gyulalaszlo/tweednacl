@@ -55,22 +55,7 @@ import tweednacl.nacl;
 
 
 struct Curve25519XSalsa20Poly1305 {
-  //enum Primitive = CryptoPrimitive(
-  mixin Curve25519XSalsa20Poly1305Implementation!"crypto_box/curve25519xsalsa20poly1305/tweet";
-
-      //"curve25519xsalsa20poly1305",
-      //"crypto_box/curve25519xsalsa20poly1305/tweet");
-
-
-  //[>* The number of 0 bytes in front of the plaintext <]
-  //enum ZeroBytes = 32;
-  //[>* The number of 0 bytes in front of the encrypted box. <]
-  //enum BoxZeroBytes = 16;
-
-  //alias PublicKey = ubyte[32];
-  //alias SecretKey = ubyte[32];
-  //alias Nonce = ubyte[24];
-  //alias Beforenm = ubyte[32];
+  mixin Curve25519XSalsa20Poly1305Implementation!"crypto_box/curve25519xsalsa20poly1305/D";
 
   /**
 
@@ -121,8 +106,8 @@ struct Curve25519XSalsa20Poly1305 {
   }
   body {
     ubyte k[32];
-    crypto_box_beforenm(k,recvPk,senderSk);
-    return crypto_box_afternm(cypherText,m,nonce,k);
+    beforenm(k,recvPk,senderSk);
+    return afternm(cypherText,m,nonce,k);
   }
 
 /**
@@ -144,7 +129,7 @@ struct Curve25519XSalsa20Poly1305 {
 
   */
   pure nothrow @safe @nogc
-  static bool boxOpen(
+  static bool open(
       ubyte[] m,const ubyte[] cypherText,
       ref const Nonce nonce,
       ref const PublicKey senderPk,
@@ -157,8 +142,8 @@ struct Curve25519XSalsa20Poly1305 {
   }
   body {
     ubyte k[32];
-    crypto_box_beforenm(k,senderPk,recvSk);
-    return crypto_box_open_afternm(m,cypherText,nonce,k);
+    beforenm(k,senderPk,recvSk);
+    return openAfternm(m,cypherText,nonce,k);
   }
 
 
@@ -201,7 +186,7 @@ struct Curve25519XSalsa20Poly1305 {
     foreach(i;0..ZeroBytes) assert( m[i] == 0 );
   }
   body {
-    return XSalsa20Poly1305.secretbox(cypherText,m,nonce,k);
+    return XSalsa20Poly1305.box(cypherText,m,nonce,k);
   }
 
   /** ditto */
@@ -215,19 +200,11 @@ struct Curve25519XSalsa20Poly1305 {
       assert( cypherText[i] == 0 );
   }
   body {
-    return XSalsa20Poly1305.secretboxOpen(m,cypherText,nonce,k);
+    return XSalsa20Poly1305.open(m,cypherText,nonce,k);
   }
 
 }
 
-
-alias crypto_box_keypair = Curve25519XSalsa20Poly1305.keypair;
-alias crypto_box = Curve25519XSalsa20Poly1305.box;
-alias crypto_box_open = Curve25519XSalsa20Poly1305.boxOpen;
-
-alias crypto_box_beforenm = Curve25519XSalsa20Poly1305.beforenm;
-alias crypto_box_afternm = Curve25519XSalsa20Poly1305.afternm;
-alias crypto_box_open_afternm = Curve25519XSalsa20Poly1305.openAfternm;
 
 private:
 alias CXSP = Curve25519XSalsa20Poly1305;
@@ -295,16 +272,16 @@ unittest {
     ];
 
   CXSP.Beforenm k;
-  crypto_box(c, m, nonce, bobpk, alicesk);
+  Curve25519XSalsa20Poly1305.box(c, m, nonce, bobpk, alicesk);
   assert( c[16..163] == cert );
   c[] = 0;
-  crypto_box_beforenm(k, bobpk, alicesk);
-  crypto_box_afternm(c, m, nonce, k);
+  Curve25519XSalsa20Poly1305.beforenm(k, bobpk, alicesk);
+  Curve25519XSalsa20Poly1305.afternm(c, m, nonce, k);
   assert( c[16..163] == cert );
 
   ubyte[163] decodedMsg;
 
-  assert( crypto_box_open( decodedMsg, c, nonce, alicepk, bobsk ) );
+  assert( Curve25519XSalsa20Poly1305.open( decodedMsg, c, nonce, alicepk, bobsk ) );
   assert( decodedMsg[16..163] == m[16..163] );
 }
 
@@ -359,11 +336,11 @@ unittest {
     ];
   ubyte m[163];
   CXSP.Beforenm k;
-  assert(crypto_box_open(m, c, nonce, alicepk, bobsk));
+  assert(Curve25519XSalsa20Poly1305.open(m, c, nonce, alicepk, bobsk));
   assert( m[32..163] == cert);
   m[] = 0;
-  crypto_box_beforenm(k, alicepk, bobsk);
-  assert(crypto_box_open_afternm(m, c, nonce, k));
+  Curve25519XSalsa20Poly1305.beforenm(k, alicepk, bobsk);
+  assert(Curve25519XSalsa20Poly1305.openAfternm(m, c, nonce, k));
   assert( m[32..163] == cert);
 }
 
@@ -382,8 +359,8 @@ version (TweedNaClLargeBufferTests) {
     ubyte c[32000];
     ubyte m2[32000];
 
-    crypto_box_keypair!safeRandomBytes(alicepk, alicesk);
-    crypto_box_keypair!safeRandomBytes(bobpk, bobsk);
+    Curve25519XSalsa20Poly1305.keypair!safeRandomBytes(alicepk, alicesk);
+    Curve25519XSalsa20Poly1305.keypair!safeRandomBytes(bobpk, bobsk);
 
     size_t mlen;
     // This test is reallly slow when incrementing 1-by-1
@@ -396,14 +373,14 @@ version (TweedNaClLargeBufferTests) {
 
       foreach(ref e;n) n = uniform(ubyte.min, ubyte.max);
       foreach(ref e;m[CXSP.ZeroBytes..msgBlockLen]) e = uniform(ubyte.min, ubyte.max);
-      crypto_box(c[0..msgBlockLen], m[0..msgBlockLen], n, bobpk, alicesk);
-      assert( crypto_box_open(m2, c[0..msgBlockLen], n, alicepk, bobsk), "ciphertext fails verification");
+      Curve25519XSalsa20Poly1305.box(c[0..msgBlockLen], m[0..msgBlockLen], n, bobpk, alicesk);
+      assert( Curve25519XSalsa20Poly1305.open(m2, c[0..msgBlockLen], n, alicepk, bobsk), "ciphertext fails verification");
       assert( m2[0..msgBlockLen] == m[0..msgBlockLen] );
 
       foreach(i;0..10) {
         c[uniform(0, msgBlockLen)] = uniform(ubyte.min,ubyte.max);
         c[0..CXSP.ZeroBytes] = 0;
-        if (crypto_box_open(m2, c[0..msgBlockLen], n, alicepk, bobsk))
+        if (Curve25519XSalsa20Poly1305.open(m2, c[0..msgBlockLen], n, alicepk, bobsk))
           assert( m2[0..msgBlockLen] == m[0..msgBlockLen], "forgery" );
       }
       //writefln("done len: %s", mlen);
