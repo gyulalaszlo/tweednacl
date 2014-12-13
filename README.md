@@ -1,3 +1,6 @@
+# WORK IN PROGRESS!!!
+
+
 # Cryptography in D
 
 * Tour de force
@@ -100,7 +103,9 @@ device has none of these. In this case the security may be compromised
 when using improper implementation.
 
 
-__This means the library needs to be easy to use and hard to misuse.__
+### Conclusion
+
+__The library needs to be easy to use and hard to misuse.__
 
 
 
@@ -114,11 +119,31 @@ check that its contents hasnt bee altered.
 ### Generating a keypair
 
 ```D
+  // Generate a public-private keypair for signing
+  auto keyPair = generateSignKeypair();
 
+  // Pulic key:
+  auto pK = keyPair.publicKey;
+
+  // Secret key:
+  auto sK = keyPair.secretKey;
 ```
 
 ### Sign a message
+
+```D
+  // Sign a message
+  auto signedMessage = sign( message, mySecretKey );
+```
+
 ### Authenticate a message using a public key
+
+```D
+  // Opens signedMessage signed by the other party using sign()
+  // throws an error
+  auto message = openSigned( signedMessage, otherPartyPublicKey );
+  scope (error) { /* cleanup if the message was invalid */ }
+```
 
 
 
