@@ -111,9 +111,9 @@ unittest
     {
       auto k1 = K();
       k1.randomize();
-      writefln( "raw  = %s", k1.toBase64() );
-      writefln( "kstr = %s", k1.keyString() );
-      writefln( "key  = %s\n", k1.keyData() );
+      //writefln( "raw  = %s", k1.toBase64() );
+      //writefln( "kstr = %s", k1.keyString() );
+      //writefln( "key  = %s\n", k1.keyData() );
     }
   }
 

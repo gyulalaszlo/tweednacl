@@ -126,7 +126,7 @@ template Handshake( Signer, Steps... )
       stepCalls ~= format("steps[%s].%s( %s );", i, stepName, join(argList, ", "));
     }
 
-    return join( ["// ", join(prelude, "\n"), join(stepCalls,"\n"),
+    return join( [join(prelude, "\n"), join(stepCalls,"\n"),
         methodBody, join(returnStr, "\n") ], "\n");
   }
 
@@ -487,10 +487,6 @@ unittest
 
 /**
   Implements the exchange of Public keys between two parties.
-
-  The resulting Nonce is a bit-mixture of the nonces offered by both
-  by the challenger and the responder. (see the $(D mixNonces) function)
-
   */
 struct PublicKeyExchangeHandshakeSteps(
     PublicKey
@@ -745,7 +741,7 @@ pure @nogc nothrow Nonce bitmixNonces(Nonce)( ref const Nonce initiator, ref con
 {
   Nonce o;
   foreach(i,ref oe;o) {
-    oe = cast(ubyte)((initiator[i] ^ 0b01010101u) + (receiver[i] ^ 0b10101010u));
+    oe = cast(ubyte)((initiator[i] & 0b01010101u) + (receiver[i] & 0b10101010u));
   }
   return o;
 }
@@ -754,12 +750,12 @@ pure @nogc nothrow Nonce bitmixNonces(Nonce)( ref const Nonce initiator, ref con
   A signer that does not sign anything. Useful if the communication
   channel is already secure (like an already established Box).
 
-  Also implements the interface required by the signature mechanism.
+  Also implements the minimum interface required by the signature mechanism.
   */
 struct NoSignature
 {
   alias RandomData = ubyte[0];
-  struct Data { RandomData challenge; RandomData response; } //RandomBlock!(RandomData, true);
+  struct Data { RandomData challenge; RandomData response; }
 
   enum SignatureSize = 0;
   enum Bytes = 0;
@@ -767,7 +763,6 @@ struct NoSignature
   auto sign(ubyte[] m) { return m; }
   auto open(ubyte[] m) { return m; }
   void restart() {}
-
   void initRandom() {}
 }
 
@@ -843,9 +838,7 @@ template HandshakeSigner(SignPrimitive, alias safeRnd=safeRandomBytes)
     }
     body
     {
-      //auto o = zeroOut(m);
       size_t mlen;
-      //if (!SignPrimitive.openInPlace( o, mlen, m, otherPartyPublicKey ))
       if (!SignPrimitive.openInPlace( m, mlen, otherPartyPublicKey ))
         throw new HandshakeError("Handshake signature mismatch");
 

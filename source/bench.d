@@ -223,9 +223,8 @@ void runTestSignatures(ReferenceImplementation=Ed25519)( size_t bufSize )
       version (TweedNaClUseNaCl)
         alias GenAlgorithm = SodiumEd25519;
       else
-        alias GenAlgorithm = Algorithm; //.keypair!unSafeRandomBytes( aPk[i], aSk[i] );
+        alias GenAlgorithm = Algorithm;
 
-      auto r = round(testData, format("%s:keygen", GenAlgorithm.Implementation));
       foreach(i;0..repeats)
       {
         GenAlgorithm.keypair!unSafeRandomBytes( aPk[i], aSk[i] );
@@ -317,7 +316,6 @@ void runBench(alias test, R)(R bufSize)
 void main(string[] args)
 {
   auto s = BufSizeRange(2);
-  //runBench!( (b) => runTestSignatures(b) )( BufSizeRange(12,13) );
   runBench!( (b) => testHashes(b) )(s);
   runBench!( (b) => testSecretbox(b) )(s);
   testCryptobox(256);

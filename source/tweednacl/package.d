@@ -676,6 +676,27 @@ unittest
     testBoxers!4(bobBoxer, aliceBoxer);
 }
 
+unittest
+{
+
+    auto aliceSignKeys = generateSignKeypair();
+    auto bobSignKeys = generateSignKeypair();
+
+    auto aliceSession = session();
+    auto bobSession = session();
+
+    auto aliceH = aliceSession.signedHandshake( bobSignKeys.publicKey, aliceSignKeys.secretKey );
+    auto bobH = bobSession.signedHandshake( aliceSignKeys.publicKey, bobSignKeys.secretKey );
+
+    // Alice and Bob exchange their session public keys.
+    bobH.succeed( aliceH.sync( bobH.response( aliceH.challenge() )));
+
+    auto bobBoxer = bobSession.open( bobH.open() );
+    auto aliceBoxer = aliceSession.open( aliceH.open() );
+
+    testBoxers!4(bobBoxer, aliceBoxer);
+}
+
 /**
   Helper to set up a forward-secret session with an ephemeral key
   usin Impl.
@@ -723,12 +744,12 @@ struct Session(Impl)
   /**
     Create a new $(RED unsigned) handshake to agree on public keys for this session.
     */
-  auto signedHandshake(
-    Primitive=Curve25519XSalsa20Poly1305,
-    SignPrimitive=Ed25519)(
-      SignPrimitive.PublicKey otherPartyPublicKey,
-      SignPrimitive.SecretKey mySecretKey
+  auto signedHandshake( SignPrimitive=Ed25519, PublicKey, SecretKey)
+    (
+      PublicKey otherPartyPublicKey,
+      SecretKey mySecretKey
       )
+    if (is(PublicKey == SignPrimitive.PublicKey ) && is(SecretKey == SignPrimitive.SecretKey))
   {
     return signedBoxHandshake!Impl(sessionKeyPair.publicKey, otherPartyPublicKey, mySecretKey);
   }

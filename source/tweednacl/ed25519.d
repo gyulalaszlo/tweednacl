@@ -23,8 +23,6 @@ import tweednacl.sha512 : SHA512;
 struct Ed25519
 {
   mixin Ed25519Implementation!("D");
-  //enum Primitive = CryptoPrimitive("ed25519",
-      //"crypto_sign/ed25519/tweet" );
 
   //enum Bytes = 64;
   //enum SeedBytes = 32;
