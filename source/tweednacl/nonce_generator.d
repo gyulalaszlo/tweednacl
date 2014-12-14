@@ -1,6 +1,5 @@
 module tweednacl.nonce_generator;
 import tweednacl.basics;
-//import tweednacl.sha512;
 
 /**
   Implments a simple nonce-generator.
@@ -40,6 +39,17 @@ struct DoubleStriderNonce(size_t nonceSize) {
     mine.bytes = myStartNonce;
     other.bytes = otherStartNonce;
     initOffsetsAndNonces(myPk > otherPk);
+  }
+
+  void writeToMessage( ref Nonce msgNonce )
+  {
+    msgNonce = mine.front;
+  }
+
+
+  void readFromMessage( ref const Nonce msgNonce )
+  {
+    other.bytes = msgNonce;
   }
 
   // Helper to initialize the offsets depending on if my public key is bigger
@@ -111,12 +121,46 @@ unittest {
 
 }
 
+struct InMessageNonce(size_t nonceSize) {
+  alias Nonce = ubyte[nonceSize];
 
+  alias NonceS = NonceStream!(nonceSize, 2, 0xfe);
+
+  /// The nonce stream that I use to encrypt packages sent by me.
+  NonceS mine;
+  /// The nonce that mirrors the other partys $(D mine) stream, which
+  /// he or she uses to encrypt packages sent to me.
+  NonceS other;
+
+  /** Initializes the nonce generator to 0  */
+  this(Pk)(ref const Pk myPk, ref const Pk otherPk,
+      ref const Nonce myStartNonce, ref const Nonce otherStartNonce )
+  {
+    mine.bytes = myStartNonce;
+    other.bytes = otherStartNonce;
+    initOffsetsAndNonces(myPk > otherPk);
+  }
+
+  // Helper to initialize the offsets depending on if my public key is bigger
+  // then the other partys.
+  // Also makes sure that the nonces are in their lockstep state. Call after
+  // setting the nonces
+  private void initOffsetsAndNonces( bool isMyPkBigger )
+  {
+    mine.offset = isMyPkBigger ? 0 : 1;
+    other.offset = isMyPkBigger ? 1 : 0;
+
+    mine.popFront();
+    other.popFront();
+  }
+
+}
 /**
   Implments a single nonce-generator.
 
   This simply enables for secret-key encryption primitives to have the same
-  nonce on both sides of a communication.
+  nonce on both sides of a communication (when the public keys cannot be compared
+  for consistency).
  */
 struct SingleNonce(size_t nonceSize) {
   alias Nonce = ubyte[nonceSize];
@@ -128,23 +172,11 @@ struct SingleNonce(size_t nonceSize) {
   @property ref auto mine() { return nonces; }
   @property ref auto other() { return nonces; }
 
-  ///// The nonce I use to encrypt packages sent by me and the other party uses 
-  ///// to encrypt packages sent to me.
-  //@property ref Nonce myNonce() { return nonces.front; }
-  ///// ditto
-  //@property ref Nonce otherNonce() { return nonces.front; }
-
   /** Initializes the nonce generator to 0  */
   this( ref const Nonce startNonce )
   {
     nonces.bytes = startNonce;
   }
-
-  //[>* Sets the next nonce for the next <]
-  //void nextMine() { nonces.popFront(); }
-
-  //[>* Sets the next nonce for the next <]
-  //void nextOther() { nonces.popFront(); }
 }
 
 /**
@@ -182,7 +214,7 @@ template NonceStream(size_t byteCount, ubyte incrementAmt=1, ubyte mask=0) {
   }
 }
 
-// Calulcates the next nonce in the stream
+// Calulcates the next nonce in the stream in a miraculously slow way.
 private void increment(size_t n)( ref ubyte[n] nonce, ubyte amount = 1 )
 {
   uint carry = amount;
@@ -205,18 +237,7 @@ unittest {
 }
 
 /**
-  Generates a nonce that is based on the current clock value.
-
-  The output of the function is as follows:
-  ---
-
-  | Hash of current time           | Current time (Little Endian)
-  +---+---+---+-----+--------------+---+---+---+---+---+---+---+---+
-  | 0 | 1 | 2 | ... | Hash.Bytes-8 | 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 |
-  +---+---+---+-----+--------------+---+---+---+---+---+---+---+---+
-  | 0                              | Hash.Bytes-8
-
-  ---
+  Generates a nonce.
   */
 auto generateNonce(size_t byteCount, alias safeRnd=safeRandomBytes)()
 {
@@ -253,7 +274,6 @@ unittest {
   bool[NonceT] usedNonces;
   struct TestPrimitive {
     alias Nonce = NonceT;
-
   }
 
   foreach(i;0..1024) {
