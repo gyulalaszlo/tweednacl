@@ -9,6 +9,7 @@
 
 $(UL
   $(LI $(LINK2 nacl.html , Rationale / about to NaCl ))
+  $(LI $(LINK2 keys.html , Keys ))
   $(LI $(LINK2 handshake.html , Handshakes ))
   )
 
@@ -52,36 +53,6 @@ alias boxSecretKey(Impl=Curve25519XSalsa20Poly1305) = tweednacl.keys.secretKey!I
 alias signPublicKey(Impl=Ed25519) = tweednacl.keys.publicKey!Impl;
 alias signSecretKey(Impl=Ed25519) = tweednacl.keys.secretKey!Impl;
 
-/**
-  A generic pair of secret and public keys for signing data and an algorithm.
-  */
-struct KeyPair(Impl)
-{
-  /** Accessor for the implementation */
-  alias Primitive = Impl;
-
-  /** The memory representation of a public key */
-  alias PublicKey = Impl.PublicKey;
-
-  /** The memory representation of a secret key */
-  alias SecretKey = Impl.SecretKey;
-
-  /** The public key to validate signed data with. */
-  PublicKey publicKey;
-
-  /** The secret key */
-  SecretKey secretKey;
-
-  ~this() { erase(); }
-
-  /** Overwrite the keys with zeroes ( automatically gets called on destruction ).  */
-  void erase() { publicKey[] = 0; secretKey[] = 0; }
-
-  @property {
-    auto ref pub() { return cast(tweednacl.keys.publicKey!Impl*)(&publicKey[0]); }
-    auto ref sec() { return cast(tweednacl.keys.secretKey!Impl*)(&secretKey[0]); }
-  }
-}
 
 /**
   Generates a keypair for the sign() and openSigned() functions.
