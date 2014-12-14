@@ -210,6 +210,31 @@ struct KeyPair(Impl)
 }
 
 
+/**
+Generates a pair of public and private keys for an implementation.
+
+Params:
+Impl = The implementation to use (defaults to Ed25519)
+*/
+auto generateKeypair(Impl, alias safeRnd=tweednacl.basics.safeRandomBytes)()
+{
+  auto o = KeyPair!Impl();
+  Impl.keypair!safeRnd( o.publicKey, o.secretKey );
+  return o;
+}
+
+/**
+Generates a secret key.
+*/
+auto generateSecretKey(Impl, alias safeRnd=tweednacl.basics.safeRandomBytes)()
+{
+  Impl.Key k;
+  safeRnd( k, Impl.Key.length );
+  return k;
+}
+
+
+
 private:
 
 
