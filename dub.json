@@ -8,6 +8,7 @@
   "versions": [
     "TweedNaClLargeBufferTests",
     "TweedNaClUseStdSHA512",
+    "TweedNaClUseFastMath25519"
   ],
   "dependencies": { },
   "configurations": [

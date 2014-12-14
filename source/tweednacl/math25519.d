@@ -10,17 +10,6 @@ pure nothrow @safe @nogc void set25519(out gf r, ref const gf a)
   foreach(i;0..16) r[i]=a[i];
 }
 
-pure nothrow @safe @nogc void car25519(ref gf o)
-{
-  long c;
-  foreach(i;0..16) {
-    o[i]+=(long(1)<<16);
-    c=o[i]>>16;
-    o[(i+1)*(i<15)]+=c-1+37*(c-1)*(i==15);
-    o[i]-=c<<16;
-  }
-}
-
 pure nothrow @safe @nogc void sel25519(ref gf p, ref gf q,long b)
 {
   long t,c=~(b-1);
@@ -87,24 +76,114 @@ pure nothrow @safe @nogc void Z(ref gf o,ref const gf a,ref const gf b)
   foreach(i;0..16) o[i]=a[i]-b[i];
 }
 
-/*
-   Additions and subtractions do not have to worry about carries or modular
-   reduction; they simply turn into a loop that performs 16 cofficient
-   additions or subtractions.  Multiplication performs simple "operand
-   scanning" schoolbook multiplication in two nested loops. We then reduce
-   modulo 2 ^ 256 - 38
-*/
-pure nothrow @safe @nogc void M(ref gf o,ref const gf a,ref const gf b)
+version(TweedNaClUseFastMath25519)
 {
-  long t[31];
-  // D arrays are auto-nulled
-  // foreach(i;0..31) t[i]=0;
-  foreach(i;0..16) foreach(j;0..16) t[i+j]+=a[i]*b[j];
-  foreach(i;0..15) t[i]+=38*t[i+16];
-  foreach(i;0..16) o[i]=t[i];
-  car25519(o);
-  car25519(o);
+  // The M function itself is responsible for most of the workload during
+  // public-key signing and encryption.
+  //
+  // This version simply expands the loops of the Tweet version to use
+  // local variables (registers) instead of accessing the input array directly,
+  // so the compiler can do its magic.
+  //
+  // This gives a little speed boost in DMD and about halves the execution time
+  // of the complete Ed25519 sigining process in LDC.
+
+  private string genCar25519Body()
+  {
+    import std.string;
+    string[] o;
+
+    foreach(i;0..16)
+    {
+      o ~= format( "t%s += long(1) << 16;", i,);
+      o ~= format( "c = t%s >> 16;", i,);
+      o ~= format( "t%s += c - 1 + 37 * (c-1) * (%s == 15);", ((i+1) * (i < 15)), i,);
+      o ~= format( "t%s -= c << 16;" , i);
+    }
+    return o.join("\n");
+  }
+
+  private string genCar25519()
+  {
+    import std.string;
+    string[] o;
+
+    foreach(i;0..16) o ~= format("long t%s = o[%s];", i,i);
+    o ~= "long c;";
+    o ~= genCar25519Body();
+    foreach(i;0..16) o ~= format("o[%s]=t%s;", i,i);
+    return o.join("\n");
+  }
+
+  private string genM()
+  {
+    import std.string;
+    string[] o;
+
+    foreach(i;0..16) o ~= format("long a%s = a[%s];", i,i );
+    foreach(i;0..16) o ~= format("long b%s = b[%s];", i,i );
+
+    string[][31] addParts;
+    foreach(i;0..16) foreach(j;0..16) addParts[i+j] ~= format( "a[%s] * b[%s]", i,j);
+    foreach(i,p;addParts) o ~= format("long t%s = %s;", i, p.join(" + ") );
+
+    foreach(i;0..15) o ~= format("t%s += 38 * t%s;", i, i+16);
+
+    o ~= "long c;";
+    foreach(rep;0..2) o ~= genCar25519Body();
+    foreach(i;0..16) o ~= format("o[%s]=t%s;", i,i);
+
+    return o.join("\n");
+  }
+
+  pure nothrow @safe @nogc void car25519(ref gf o)
+  {
+    debug(TweedNaClDebugFastMath25519)
+      pragma(msg, genCar25519());
+    mixin(genCar25519());
+  }
+
+  pure nothrow @safe @nogc void M(ref gf o,ref const gf a,ref const gf b)
+  {
+    debug(TweedNaClDebugFastMath25519)
+      pragma(msg, genM());
+    mixin(genM());
+  }
+
 }
+else  // version(TweedNaClUseFastMath25519)
+{
+
+  pure nothrow @safe @nogc void car25519(ref gf o)
+  {
+    long c;
+    foreach(i;0..16) {
+      o[i]+=(long(1)<<16);
+      c=o[i]>>16;
+      o[(i+1)*(i<15)]+=c-1+37*(c-1)*(i==15);
+      o[i]-=c<<16;
+    }
+  }
+
+  /*
+     Additions and subtractions do not have to worry about carries or modular
+     reduction; they simply turn into a loop that performs 16 cofficient
+     additions or subtractions.  Multiplication performs simple "operand
+     scanning" schoolbook multiplication in two nested loops. We then reduce
+     modulo 2 ^ 256 - 38
+  */
+  pure nothrow @safe @nogc void M(ref gf o,ref const gf a,ref const gf b)
+  {
+    long t[31];
+    foreach(i;0..16) foreach(j;0..16) t[i+j]+=a[i]*b[j];
+    foreach(i;0..15) t[i]+=38*t[i+16];
+    foreach(i;0..16) o[i]=t[i];
+    car25519(o);
+    car25519(o);
+  }
+
+}
+
 
 pure nothrow @safe @nogc void S(ref gf o,ref const gf a)
 {
