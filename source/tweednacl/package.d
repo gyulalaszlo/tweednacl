@@ -44,6 +44,14 @@ import tweednacl.xsalsa20poly1305 : XSalsa20Poly1305;
 import tweednacl.poly1305 : Poly1305;
 import tweednacl.nonce_generator;
 
+import tweednacl.keys;
+
+alias boxPublicKey(Impl=Curve25519XSalsa20Poly1305) = tweednacl.keys.publicKey!Impl;
+alias boxSecretKey(Impl=Curve25519XSalsa20Poly1305) = tweednacl.keys.secretKey!Impl;
+
+alias signPublicKey(Impl=Ed25519) = tweednacl.keys.publicKey!Impl;
+alias signSecretKey(Impl=Ed25519) = tweednacl.keys.secretKey!Impl;
+
 /**
   A generic pair of secret and public keys for signing data and an algorithm.
   */
@@ -68,8 +76,12 @@ struct KeyPair(Impl)
 
   /** Overwrite the keys with zeroes ( automatically gets called on destruction ).  */
   void erase() { publicKey[] = 0; secretKey[] = 0; }
-}
 
+  @property {
+    auto ref pub() { return cast(tweednacl.keys.publicKey!Impl*)(&publicKey[0]); }
+    auto ref sec() { return cast(tweednacl.keys.secretKey!Impl*)(&secretKey[0]); }
+  }
+}
 
 /**
   Generates a keypair for the sign() and openSigned() functions.
@@ -91,6 +103,16 @@ struct KeyPair(Impl)
 alias generateSignKeypair(Impl=Ed25519, alias safeRnd=tweednacl.basics.safeRandomBytes)
   = generateKeypair!(Impl, safeRnd);
 
+unittest
+{
+  import std.stdio;
+  auto a = generateSignKeypair();
+  writefln( a.pub.keyString );
+  writefln( a.sec.keyString );
+
+  assert( signPublicKey!Ed25519.fromKeyString(a.pub.keyString).data == a.publicKey );
+  assert( signSecretKey!Ed25519.fromKeyString(a.sec.keyString).data == a.secretKey );
+}
 
 /**
   Signs a message using the given secret key

@@ -357,7 +357,9 @@ version (TweedNaClUseTweetNaCl)
     extern (C) void randombytes(ubyte* b, ulong l)
     {
       import tweednacl.basics : safeRandomBytes;
-      safeRandomBytes(b[0..l], l);
+
+      auto ls = cast(size_t)(l);
+      safeRandomBytes(b[0..ls], ls);
     }
   }
 
@@ -555,13 +557,19 @@ struct NaClEd25519(
   static @system
   bool sign(ubyte[] sm, out size_t smlen, const ubyte[] m, ref const SecretKey sk)
   {
-    return crypto_sign(&sm[0], &smlen, &m[0], m.length, &sk[0]) == 0;
+    ulong smlenO;
+    auto ret = crypto_sign(&sm[0], &smlenO, &m[0], cast(ulong)(m.length), &sk[0]) == 0;
+    smlen = cast(size_t)(smlenO);
+    return ret;
   }
 
   static @system
   bool open(ubyte[] m, ref size_t mlen, const ubyte[] sm, ref const PublicKey pk)
   {
-    return crypto_sign_open(&m[0], &mlen, &sm[0], sm.length, &pk[0]) == 0;
+    ulong mlenO;
+    auto ret = crypto_sign_open(&m[0], &mlenO, &sm[0], sm.length, &pk[0]) == 0;
+    mlen = cast(size_t)(mlenO);
+    return ret;
   }
 
 

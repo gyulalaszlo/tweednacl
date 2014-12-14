@@ -239,7 +239,7 @@ unittest {
 /**
   Generates a nonce.
   */
-auto generateNonce(size_t byteCount, alias safeRnd=safeRandomBytes)()
+auto generateNonceBytes(size_t byteCount, alias safeRnd=safeRandomBytes)()
 {
   import tweednacl.basics;
 
@@ -254,7 +254,7 @@ unittest {
   bool[ubyte[nonceSize]] usedNonces;
 
   foreach(i;0..1024) {
-    auto nonceFromHandshake = generateNonce!nonceSize();
+    auto nonceFromHandshake = generateNonceBytes!nonceSize();
     assert( (nonceFromHandshake in usedNonces) is  null );
     usedNonces[nonceFromHandshake] = true;
   }
@@ -265,7 +265,7 @@ unittest {
 /** ditto */
 auto generateNonce(Impl, alias safeRnd=safeRandomBytes)()
 {
-  return generateNonce!(Impl.Nonce.length, safeRnd);
+  return generateNonceBytes!(Impl.Nonce.length, safeRnd);
 }
 
 unittest {

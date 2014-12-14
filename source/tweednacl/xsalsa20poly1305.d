@@ -32,7 +32,7 @@ import tweednacl.xsalsa20 : XSalsa20;
 import tweednacl.nacl;
 
 struct XSalsa20Poly1305 {
-  mixin XSalsa20Poly1305Implementation!"crypto_secretbox/xsalsa20poly1305/D";
+  mixin XSalsa20Poly1305Implementation!"D";
 
   alias afternm = box;
   alias openAfternm = open;

@@ -19,7 +19,7 @@ struct TestData {
   size_t testDataSize = 1024 * 1024;
 }
 
-
+bool gnuplotFormat = false;
 
 enum HasRepeats { no=0, yes=1 };
 
@@ -38,16 +38,16 @@ struct Round(HasRepeats hasRepeats)
   ~this() {
     static if (hasRepeats) {
       auto res = sw.peek() / testData.repeats;
-      writefln("%s %sreps \t%s",
-          label,
-          testData.repeats,
-          res.nsecs );
+      if (gnuplotFormat)
+        writefln("%s %sreps \t%s", label, testData.repeats, res.nsecs );
+      else
+        writefln("%10s %s %sreps", res.nsecs, label, testData.repeats );
     } else {
-      auto res = sw.peek() / testData.testDataSize;
-      writefln("%s %sbytes \t%s",
-          label,
-          testData.bufferSize,
-          res.nsecs );
+      auto res = sw.peek() / (testData.testDataSize / 1024);
+      if (gnuplotFormat)
+        writefln("%s %sbytes \t%s", label, testData.bufferSize, res.nsecs / 1024 );
+      else
+        writefln("%10s %s %sbytes", res.nsecs / 1024, label, testData.bufferSize );
     }
   }
 
@@ -213,11 +213,14 @@ void runTestSignatures(ReferenceImplementation=Ed25519)( size_t bufSize )
     Algorithm.SecretKey[] aSk;
 
     enum AlgCounts = 3;
+    auto usedAlgs = 1;
     Algorithm.Signature[][AlgCounts] sigs;
 
     aPk.length = aSk.length = /*sigs.length = */ repeats;
     foreach(ref s;sigs) s.length = repeats;
 
+    version (TweedNaClUseTweetNaCl) usedAlgs++;
+    version (TweedNaClUseNaCl) usedAlgs++;
     // generate the keys using something most likely fast.
     {
       version (TweedNaClUseNaCl)
@@ -243,9 +246,9 @@ void runTestSignatures(ReferenceImplementation=Ed25519)( size_t bufSize )
     auto failCount = 0;
     foreach(i;0..repeats)
     {
-      foreach(a;0..AlgCounts)
+      foreach(a;0..usedAlgs)
       {
-        foreach(b;a..AlgCounts)
+        foreach(b;a..usedAlgs)
         {
           if (sigs[a][i] != sigs[b][i]) {
             if (failCount < 3)
@@ -315,9 +318,22 @@ void runBench(alias test, R)(R bufSize)
 
 void main(string[] args)
 {
+  import std.getopt;
+  bool runHashes = true;
+  bool runSecretbox = true;
+  bool runCryptobox = true;
+  bool runSignatures = true;
+
+  getopt( args,
+          "hash", &runHashes,
+          "secretbox", &runSecretbox,
+          "cryptobox", &runCryptobox,
+          "signatures", &runSignatures,
+          "gnuplot", &gnuplotFormat);
+
   auto s = BufSizeRange(2);
-  runBench!( (b) => testHashes(b) )(s);
-  runBench!( (b) => testSecretbox(b) )(s);
-  testCryptobox(256);
-  runBench!( (b) => runTestSignatures(b) )( BufSizeRange(10,17, 3) );
+  if (runHashes) runBench!( (b) => testHashes(b) )(s);
+  if (runSecretbox) runBench!( (b) => testSecretbox(b) )(s);
+  if (runCryptobox) testCryptobox(256);
+  if (runSignatures) runBench!( (b) => runTestSignatures(b) )( BufSizeRange(10,17, 3) );
 }

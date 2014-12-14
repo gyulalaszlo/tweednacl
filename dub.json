@@ -5,7 +5,12 @@
   "copyright": "Copyright © 2014, Gyula László",
   "license": "BSL-1.0",
   "authors": ["Gyula László"],
-  "versions": [
+  "versions-ldc": [
+    "TweedNaClLargeBufferTests",
+    "TweedNaClUseStdSHA512",
+    "TweedNaClUseFastMath25519"
+  ],
+  "versions-dmd": [
     "TweedNaClLargeBufferTests",
     "TweedNaClUseStdSHA512",
     "TweedNaClUseFastMath25519"
@@ -32,6 +37,15 @@
         "TweedNaClUseTweetNaCl",
         "TweedNaClUseNaCl"
       ]
+    },
+    {
+      "name": "tweedbenchmin",
+      "targetPath": "bin",
+      "targetType": "executable",
+      "mainSourceFile": "source/bench.d",
+      "lflags-windows-x86_64": ["$PACKAGE_DIR/vendor/tweetnacl-x86_64.obj"],
+      "preBuildCommands-windows-x86_64": [ "$PACKAGE_DIR/vendor/tweetnacl_win.cmd x86_64" ],
+      "versions-windows-x86_64": [ "TweedNaClUseTweetNaCl" ]
     }
   ],
   "buildTypes": {

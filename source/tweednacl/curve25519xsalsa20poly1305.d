@@ -55,7 +55,7 @@ import tweednacl.nacl;
 
 
 struct Curve25519XSalsa20Poly1305 {
-  mixin Curve25519XSalsa20Poly1305Implementation!"crypto_box/curve25519xsalsa20poly1305/D";
+  mixin Curve25519XSalsa20Poly1305Implementation!"D";
 
   /**
 

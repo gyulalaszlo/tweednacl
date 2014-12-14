@@ -361,7 +361,7 @@ version(unittest)
   */
 struct NonceHandshakeSteps(
     Nonce,
-    alias nonceGeneratorFn=generateNonce!(Nonce.length),
+    alias nonceGeneratorFn=generateNonceBytes!(Nonce.length),
     alias nonceMixerFn=bitmixNonces!(Nonce)
     )
 {
@@ -430,7 +430,7 @@ struct NonceHandshakeSteps(
 
   */
 auto nonceHandshake( Nonce,
-    alias nonceGeneratorFn=generateNonce!(Nonce.length)
+    alias nonceGeneratorFn=generateNonceBytes!(Nonce.length)
     )()
 {
   alias H = NonceHandshakeSteps!(ubyte[Nonce.length], nonceGeneratorFn);
@@ -449,7 +449,7 @@ unittest
 /** ditto */
 auto signedNonceHandshake( Data,
     SignPrimitive = Ed25519,
-    alias nonceGeneratorFn=generateNonce!(Data.length),
+    alias nonceGeneratorFn=generateNonceBytes!(Data.length),
     alias nonceMixerFn=bitmixNonces!Data,
     Pk, Sk
     )( Pk otherPk, Sk mySk)
