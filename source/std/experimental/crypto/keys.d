@@ -1,7 +1,7 @@
-module tweednacl.keys;
+module std.experimental.crypto.keys;
 
-import tweednacl.basics : safeRandomBytes;
-import tweednacl.nacl : primitiveName;
+import tweednacl.random : safeRandomBytes;
+import std.experimental.crypto.nacl : primitiveName;
 
 enum KeyRole { Shared = 0, Public = 1, Secret = 2 }
 
@@ -165,21 +165,23 @@ private string genFromFormat( string converterName )
 
 Examples:
 ---
-alias XSKey = sharedKey!XSalsa20;
-alias PKey = publicKey!Ed25519;
-alias SKey = secretKey!Ed25519;
+alias XSKey = sharedKeyT!XSalsa20;
+alias PKey = publicKeyT!Ed25519;
+alias SKey = secretKeyT!Ed25519;
 ---
 */
-alias sharedKey(Impl) = Key!(Impl, Impl.Key.length, KeyRole.Shared);
+alias sharedKeyT(Impl) = Key!(Impl, Impl.Key.length, KeyRole.Shared);
 /** ditto */
-alias publicKey(Impl) = Key!(Impl, Impl.PublicKey.length, KeyRole.Public);
+alias publicKeyT(Impl) = Key!(Impl, Impl.PublicKey.length, KeyRole.Public);
 /** ditto */
-alias secretKey(Impl) = Key!(Impl, Impl.SecretKey.length, KeyRole.Secret);
+alias secretKeyT(Impl) = Key!(Impl, Impl.SecretKey.length, KeyRole.Secret);
 
 
 
 /**
-A generic pair of secret and public keys for signing data and an algorithm.
+
+A generic pair of secret and public keys for a primitive.
+
 */
 struct KeyPair(Impl)
 {
@@ -192,10 +194,10 @@ struct KeyPair(Impl)
   /** The memory representation of a secret key */
   alias SecretKey = Impl.SecretKey;
 
-  /** The public key to validate signed data with. */
+  /** The public key to encode / validate signed data with. */
   PublicKey publicKey;
 
-  /** The secret key */
+  /** The secret key to decode / sign data with. */
   SecretKey secretKey;
 
   ~this() { erase(); }
@@ -204,8 +206,19 @@ struct KeyPair(Impl)
   void erase() { publicKey[] = 0; secretKey[] = 0; }
 
   @property {
-    auto ref pub() { return cast(tweednacl.keys.publicKey!Impl*)(&publicKey[0]); }
-    auto ref sec() { return cast(tweednacl.keys.secretKey!Impl*)(&secretKey[0]); }
+    /**
+      Gets a key handler object for the keys.
+
+      Examples:
+      ---
+      auto k = generateSignKeyPair();
+      wirtefln("Public key: %s", k.pub.toKeyString());
+      wirtefln("Secret key: %s", k.sec.toKeyString());
+      ---
+    */
+    auto ref pub() { return cast(publicKeyT!Impl*)(&publicKey[0]); }
+    /** ditto */
+    auto ref sec() { return cast(secretKeyT!Impl*)(&secretKey[0]); }
   }
 }
 
@@ -216,7 +229,7 @@ Generates a pair of public and private keys for an implementation.
 Params:
 Impl = The implementation to use (defaults to Ed25519)
 */
-auto generateKeypair(Impl, alias safeRnd=tweednacl.basics.safeRandomBytes)()
+auto generateKeypair(Impl, alias safeRnd=safeRandomBytes)()
 {
   auto o = KeyPair!Impl();
   Impl.keypair!safeRnd( o.publicKey, o.secretKey );
@@ -226,13 +239,12 @@ auto generateKeypair(Impl, alias safeRnd=tweednacl.basics.safeRandomBytes)()
 /**
 Generates a secret key.
 */
-auto generateSecretKey(Impl, alias safeRnd=tweednacl.basics.safeRandomBytes)()
+auto generateSecretKey(Impl, alias safeRnd=safeRandomBytes)()
 {
   Impl.Key k;
   safeRnd( k, Impl.Key.length );
   return k;
 }
-
 
 
 private:
@@ -352,9 +364,9 @@ unittest
   }
 
 
-  alias XSKey = sharedKey!XSalsa20;
-  alias PKey = publicKey!Ed25519;
-  alias SKey = secretKey!Ed25519;
+  alias XSKey = sharedKeyT!XSalsa20;
+  alias PKey = publicKeyT!Ed25519;
+  alias SKey = secretKeyT!Ed25519;
 
 
   static void testKey(K)() {
@@ -387,7 +399,7 @@ unittest
   testKey!XSKey();
   testKey!PKey();
   testKey!SKey();
-  testKey!(publicKey!Curve25519XSalsa20Poly1305)();
+  testKey!(publicKeyT!Curve25519XSalsa20Poly1305)();
 
 
   PKey pk;
@@ -407,8 +419,8 @@ unittest
   // by design
   assertNotThrown!KeyError( XSKey.fromBase64( pk.toBase64() ));
 
-  alias Pk2 = publicKey!Curve25519XSalsa20Poly1305;
-  alias Sk2 = secretKey!Curve25519XSalsa20Poly1305;
+  alias Pk2 = publicKeyT!Curve25519XSalsa20Poly1305;
+  alias Sk2 = secretKeyT!Curve25519XSalsa20Poly1305;
 
   Pk2 pk_2;
   Sk2 sk_2;

@@ -6,10 +6,11 @@ import std.string;
 import std.digest.digest;
 
 import tweednacl;
+import std.experimental.crypto;
 import tweednacl.xsalsa20poly1305;
 import tweednacl.sha512;
 import tweednacl.basics;
-import tweednacl.nacl;
+import std.experimental.crypto.nacl;
 
 enum DefaultC = 1024;
 

@@ -1,5 +1,5 @@
-module tweednacl.nonce_generator;
-import tweednacl.basics;
+module std.experimental.crypto.nonce_generator;
+import tweednacl.random;
 
 /**
   Implments a simple nonce-generator.

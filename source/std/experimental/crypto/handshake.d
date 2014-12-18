@@ -1,11 +1,9 @@
-module tweednacl.handshake;
-import tweednacl.basics;
-import tweednacl.nonce_generator;
+module std.experimental.crypto.handshake;
+import tweednacl.random;
 import tweednacl.ed25519;
 import tweednacl.curve25519xsalsa20poly1305;
+import std.experimental.crypto.nonce_generator;
 
-import std.stdio;
-import tweednacl.encoded_bytes;
 
 /** Gets thrown in case there are errors */
 class HandshakeError : Exception {
@@ -277,7 +275,6 @@ version(unittest)
   {
     import std.stdio;
     import std.exception;
-    import tweednacl.encoded_bytes;
 
     foreach(i;0..16) {
 
@@ -306,7 +303,6 @@ version(unittest)
   {
     import std.stdio;
     import std.exception;
-    import tweednacl.encoded_bytes;
     foreach(i;0..16) {
 
       auto msg1 = aliceH.challenge();

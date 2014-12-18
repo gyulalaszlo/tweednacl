@@ -152,7 +152,7 @@ $(BIG No copyright restrictions)
 
 All of the NaCl software is in the public domain.
 */
-module tweednacl.nacl;
+module std.experimental.crypto.nacl;
 
 struct CryptoPrimitive
 {

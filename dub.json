@@ -5,15 +5,20 @@
   "copyright": "Copyright © 2014, Gyula László",
   "license": "BSL-1.0",
   "authors": ["Gyula László"],
-  "versions-ldc": [
-    "TweedNaClLargeBufferTests",
+  "versions": [
     "TweedNaClUseStdSHA512",
+	"TweedNaClUseFastMath25519",
+    "TweedNaClLargeBufferTests",
+
+	"TweedNaClTest_Curve25519XSalsa20Poly1305",
+	"TweedNaClTest_Ed25519",
+	"TweedNaClTest_XSalsa20Poly1305"
+  ],
+  "versions-ldc": [
     "TweedNaClUseFastMath25519"
   ],
   "versions-dmd": [
-    "TweedNaClLargeBufferTests",
-    "TweedNaClUseStdSHA512",
-    "TweedNaClUseFastMath25519"
+    "TweedNaClUseFastMath25519",
   ],
   "dependencies": { },
   "configurations": [

@@ -1,6 +1,6 @@
 module tweednacl.salsa20;
 
-import tweednacl.nacl;
+import std.experimental.crypto.nacl;
 
 struct Salsa20 {
   enum Primitive = CryptoPrimitive( "salsa20",
