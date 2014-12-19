@@ -1,20 +1,17 @@
 /**
+<pre>
+ _                     ____  _   _        ____ _ 
+| |___      _____  ___|  _ \| \ | | __ _ / ___| |
+| __\ \ /\ / / _ \/ _ \ | | |  \| |/ _` | |   | |
+| |_ \ V  V /  __/  __/ |_| | |\  | (_| | |___| |
+ \__| \_/\_/ \___|\___|____/|_| \_|\__,_|\____|_|
 
-  $(BIG $(I "Where theres magic theres security problems"))
+</pre>
 
-  DEF CON 20 - Charlie Miller
-  $(I"Don't Stand So Close To Me: An Analysis of the NFC Attack Surface")
-  $(BR)
-  $(LINK https://www.youtube.com/watch?v=16FKOQ1gx68)
-
-$(UL
-  $(LI $(LINK2 nacl.html , Rationale / about to NaCl ))
-  $(LI $(LINK2 keys.html , Keys ))
-  $(LI $(LINK2 handshake.html , Handshakes ))
-  )
 
 License:
-TweetNaCl is public domain, TweeDNaCl is available under the Boost Public License.
+TweetNaCl is public domain, TweeDNaCl and std.experimental.crypto is available
+under the Boost Public License.
 
 */
 module tweednacl;

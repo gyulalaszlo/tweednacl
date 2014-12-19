@@ -530,7 +530,7 @@ version(TweedNaClTest_Ed25519)
     }
   }
 
-  import tweednacl.random : safeRandomBytes;
+  import tweednacl.random;
 
   unittest
   {

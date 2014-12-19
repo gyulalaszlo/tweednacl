@@ -1,3 +1,154 @@
+/**
+
+  $(COMM_TABLE_CSS)
+
+  Handshakes provide a simple process to exchange nonces (initialization vectors)
+  and public keys.
+
+  $(H2 Basic handshake steps)
+
+If Alice wants to exchange information with Bob the following conversation takes place:
+
+  $(COMM_TABLE
+    $(COMM_ROW_AB
+      $(COMM_LABEL Step 0: Prelude)
+
+      Both parties create a Handshake object with the information they want to
+      provide for the other party.
+
+      ---
+      // The handshakes used by alice and bob
+      auto aliceH = unsignedPublicKeyHandshake( alicePublicKey );
+      auto bobH = unsignedPublicKeyHandshake( bobPublicKey );
+      ---
+    )
+
+
+    $(COMM_ROW_A
+      $(COMM_LABEL Step 1: Challenge)
+
+      Alice sends a Challenge
+      ---
+      auto msg1 = aliceH.challenge();
+      ---
+    )
+
+    $(COMM_ROW_B
+      $(COMM_LABEL Step 2: Response)
+
+      Bob takes this Challenge and appends his Response to it and sends it back to Alice
+      ---
+      auto msg2 = bobH.response( msg1 );
+      ---
+    )
+
+
+    $(COMM_ROW_A
+      $(COMM_LABEL Step 3: Sync)
+
+      From the Challenge and Response and an algorithm known by both Bob and Alice, Alice
+      derives a Consensus and sends this consensus back to Bob.
+      ---
+      auto msg3 = aliceH.sync( msg2 );
+      assert( aliceH.done() );
+      ---
+    )
+
+    $(COMM_ROW_B
+
+      $(COMM_LABEL Step 4: Succeed)
+
+      Bob checks if the Consensus received from Alice is the same one he calculated.
+      ---
+      bobH.succeed( msg3 );
+      assert( bobH.done() );
+      ---
+    )
+
+    $(COMM_ROW_AB
+      $(COMM_LABEL Step 5: Done)
+
+      At this point the data is exchanged. Calling the $(D open) method ensures that
+      the key exchange has been successful (it thorws an error if the handshake is
+      incomplete, got invalid data, etc.).
+      ---
+      assert( aliceH.open() == bobPublicKey );
+      assert( bobH.open()  == alicePublicKey );
+      ---
+    )
+  )
+
+
+
+
+
+
+  $(H2 Signed handshakes)
+  
+  If the information exchanged needs to be validated or the channel of communication
+  is considered unsecure / is distorting the messages, signing can help notice any
+  forgeries, replays or integrity errors.
+
+  ---
+  auto aliceH = signedPublicKeyHandshake( alicePublicKey, bobSignKeys.publicKey, aliceSignKeys.secretKey );
+  auto bobH = signedPublicKeyHandshake( bobPublicKey, aliceSignKeys.publicKey, bobSignKeys.secretKey );
+  ---
+
+  They are used the same way as their regulare cousins:
+  ---
+  auto msg1 = aliceH.challenge();
+  auto msg2 = bobH.response( msg1 );
+  auto msg2 = bobH.response( msg1 );
+  auto msg3 = aliceH.sync( msg2 );
+
+  assert( aliceH.open() == bobPublicKey );
+  assert( bobH.open()  == alicePublicKey );
+  ---
+
+  Internally they add the following to the handshake:
+
+
+  $(COMM_TABLE
+
+    $(COMM_ROW_A
+      $(COMM_LABEL Step 1:)
+
+      The Challenge is padded with a random block from Alice and a same size of 0s.
+
+      $(I The message is signed, and this random block is part of the signed data. )
+  
+    )
+    $(COMM_ROW_B
+      $(COMM_LABEL Step 2:)
+
+      Bob checks the signature of the message and fills the block of 0s with random 
+      bytes, and copies this random block to the response message.
+
+      $(I The message is signed, and this random block is part of the signed data. )
+
+    )
+    $(COMM_ROW_A
+      $(COMM_LABEL Step 3:)
+
+      Alice checks the signature of the message and validates that her random number
+      is the one in the random header (so she can be sure that the response is in fact
+      sent for her specific challenge), and appends this random block to her sync message.
+
+      $(I The message is signed, and this random block is part of the signed data. )
+
+    )
+    $(COMM_ROW_B
+      $(COMM_LABEL Step 4:)
+
+      Bob checks the signature of the message and validates that his random number
+      is the one in the random header and Alice still uses the same random number
+      as when initialized (so she can be sure that the sync is in fact
+      sent for his specific response ).
+    )
+  )
+
+*/
+
 module std.experimental.crypto.handshake;
 import tweednacl.random;
 import tweednacl.ed25519;
@@ -5,24 +156,6 @@ import tweednacl.curve25519xsalsa20poly1305;
 import std.experimental.crypto.nonce_generator;
 
 
-/** Gets thrown in case there are errors */
-class HandshakeError : Exception {
-  this(string msg) { super("Handshake error: " ~ msg); }
-}
-
-enum isHandshakeSigner(T) =
-  __traits( hasMember, T, "sign" )
-  && __traits( hasMember, T, "open" )
-  && __traits( hasMember, T, "restart" )
-  && __traits( hasMember, T, "initRandom" )
-  ;
-
-unittest
-{
-  struct Fake {}
-  static assert( isHandshakeSigner!NoSignature );
-  static assert( !isHandshakeSigner!Fake );
-}
 
 
 
@@ -241,7 +374,7 @@ template Handshake( Signer, Steps... )
 
     /**
       Gets the exchanged consensus or throws a $(D HandshakeError) if a
-      Consensus was not reached (either because failiure or incompletition.
+      Consensus was not reached (either because failiure or incompletition.)
 
 Throws: HandshakeError if exchange was unsuceesful or finished.
      */
@@ -483,6 +616,7 @@ unittest
 
 /**
   Implements the exchange of Public keys between two parties.
+  It simply offers the key from both parties.
   */
 struct PublicKeyExchangeHandshakeSteps(
     PublicKey
@@ -727,20 +861,6 @@ unittest
 }
 
 
-/**
-  Mixes two nonces (from the initiator and the accepter) and mixes
-  them in a deterministic way.
-
-  The current implementation mixes the even-odd bits from the nonces.
- */
-pure @nogc nothrow Nonce bitmixNonces(Nonce)( ref const Nonce initiator, ref const Nonce receiver )
-{
-  Nonce o;
-  foreach(i,ref oe;o) {
-    oe = cast(ubyte)((initiator[i] & 0b01010101u) + (receiver[i] & 0b10101010u));
-  }
-  return o;
-}
 
 /**
   A signer that does not sign anything. Useful if the communication
@@ -784,7 +904,6 @@ template HandshakeSigner(SignPrimitive, alias safeRnd=safeRandomBytes)
     alias RandomData = ubyte[8];
     alias Data = RandomBlock!(RandomData, true);
 
-    //enum SignatureSize = SignPrimitive.Signature.sizeof;
     enum Bytes = SignPrimitive.Bytes + Data.sizeof;
 
     // Allow the initialization with keys.
@@ -842,7 +961,7 @@ template HandshakeSigner(SignPrimitive, alias safeRnd=safeRandomBytes)
       if (signRandomData.response != myRandom)
         throw new HandshakeError("Error in handshake");
 
-      // store the outher partys random.
+      // store the other partys random.
       if (!seenOtherRandom) {
         otherRandom = signRandomData.challenge;
         seenOtherRandom = true;
@@ -869,4 +988,39 @@ template HandshakeSigner(SignPrimitive, alias safeRnd=safeRandomBytes)
 
   }
 
+}
+
+
+/**
+Mixes two nonces (from the initiator and the accepter) and mixes
+them in a deterministic way.
+
+The current implementation mixes the even-odd bits from the nonces.
+*/
+pure @nogc nothrow Nonce bitmixNonces(Nonce)( ref const Nonce initiator, ref const Nonce receiver )
+{
+  Nonce o;
+  foreach(i,ref oe;o) {
+    oe = cast(ubyte)((initiator[i] & 0b01010101u) + (receiver[i] & 0b10101010u));
+  }
+  return o;
+}
+
+/** Gets thrown in case there are errors */
+class HandshakeError : Exception {
+  this(string msg) { super("Handshake error: " ~ msg); }
+}
+
+enum isHandshakeSigner(T) =
+__traits( hasMember, T, "sign" )
+&& __traits( hasMember, T, "open" )
+&& __traits( hasMember, T, "restart" )
+&& __traits( hasMember, T, "initRandom" )
+;
+
+unittest
+{
+  struct Fake {}
+  static assert( isHandshakeSigner!NoSignature );
+  static assert( !isHandshakeSigner!Fake );
 }

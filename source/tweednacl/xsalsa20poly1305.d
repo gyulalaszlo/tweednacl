@@ -206,7 +206,7 @@ version(TweedNaClTest_XSalsa20Poly1305)
   unittest
   {
     import std.random;
-    import tweednacl.basics : randomBuffer;
+    import tweednacl.random : randomBuffer;
 
 
     void testSecretbox(Impl)() {

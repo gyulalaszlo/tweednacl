@@ -1,20 +1,71 @@
 /**
+$(STD_CRYPTO_HEAD)
 
-  $(BIG $(I "Where theres magic theres security problems"))
+$(H2 Boxes)
 
-  DEF CON 20 - Charlie Miller
-  $(I"Don't Stand So Close To Me: An Analysis of the NFC Attack Surface")
-  $(BR)
-  $(LINK https://www.youtube.com/watch?v=16FKOQ1gx68)
+Most of the functionnality provided by std.experimental.crypto revolves around the
+concept of boxes: instead of separate signing/encrypting/etc. steps, this library
+tries to represent the simple human concepts of "I want to send this data. ENCRYPTED."
+or 
+
+"Encrypt with a public key" usually means:
 
 $(UL
-  $(LI $(LINK2 nacl.html , Rationale / about to NaCl ))
-  $(LI $(LINK2 keys.html , Keys ))
-  $(LI $(LINK2 handshake.html , Handshakes ))
-  )
+  $(LI derive a shared key from my secret key and the other partys public key)
+  $(LI "Encrypt this data" using the derived key)
+)
+
+"Encrypt this data" usually means:
+
+$(UL
+  $(LI pad the data to suit the algorithm used)
+  $(LI encrypt the data using the proper key and nonce/initialization vector)
+  $(LI add an integrity checksum)
+  $(LI add authenticity information)
+)
+
+"Decrypt with a secret key" usually means:
+
+$(UL
+  $(LI derive the same shared key from my secret key and the other partys public key)
+  $(LI "Decrypt this data" using the derived key)
+)
+
+"Decrypt this data" usually means:
+
+$(UL
+  $(LI check the authenticity of the data)
+  $(LI check the integrity of the data)
+  $(LI decrypt the data using the proper key and nonce/initialization vector)
+  $(LI remove any padding required by any of the previous algorithms)
+)
+
+
+These layers of modifications are as:  Both NaCl and std.experimental.crypto 
+
+$(UL
+  $(LI checksum + authenticity = authenticator (Poly1305))
+  $(LI padding + encryption + authenticator = secret box (XSalsa20Poly1305))
+  $(LI derive a shared secret + secret box = box (Curve25519XSalsa20Poly1305))
+)
+
+std.experimental.crypto adds the following abstractions:
+
+$(UL
+  $(LI key storage / serializatin / conversion = Key)
+  $(LI exchange public keys and/or nonces = handshake())
+  $(LI Handshake + public key authentication + replay & forgery protection = signedHandshake())
+  $(LI keeping nonces/initialization vectors in sync: nonce generators )
+    (DoubleStrided, SingleStrided, InMessage, NonceStream)
+  $(LI Perfect Forward Secrecy using ephemeral keys = session())
+)
+
+
+  
 
 License:
-TweetNaCl is public domain, TweeDNaCl is available under the Boost Public License.
+TweetNaCl is public domain, TweeDNaCl and std.experimental.crypto is available
+under the Boost Public License.
 
 */
 module std.experimental.crypto;
@@ -75,14 +126,14 @@ unittest
 Params:
   Impl = The implementation to use. Defaults to Ed25519.
 
-  signedData =  the signed data with crypto_sign_BYTES of signature followed
+  message =  the signed data with crypto_sign_BYTES of signature followed
                 by the plaintext message
-  pk         =  the public key to check the signature with
+  sk         =  the secret key to sign the message with
 
 Returns: The signed data with crypto_sign_BYTES of signature followed by the
 plaintext message
 
-  Throws: BadSignatureError if the signature does not match the message.
+Throws: BadSignatureError if the signature does not match the message.
 
 Examples:
 ---
@@ -165,19 +216,16 @@ in {
 body {
   const sm = toBytes( signedData );
   auto output = zeroOut( sm );
-  //ubyte[] output;
-  //output.length = sm.length;
   size_t outputLen;
   if (!Impl.open( output, outputLen, sm, pk ))
     throw new BadSignatureError();
-  //output.length = outputLen;
   return output[0..outputLen];
 }
 
 
 unittest {
   import std.random;
-  import tweednacl.basics : randomBuffer;
+  import tweednacl.random : randomBuffer;
 
   auto o = generateSignKeypair();
 
@@ -400,7 +448,7 @@ version(unittest) {
 
   void testBoxers(size_t testCount=TryToForgeMessagesUpTo, A,B)(A aliceBoxer, B bobBoxer)
   {
-    import tweednacl.basics : randomBuffer, forgeBuffer;
+    import tweednacl.random : randomBuffer, forgeBuffer;
     foreach(mlenMagn;0..testCount) {
       const mlen = mlenMagn == 0 ? 0 : (2 << mlenMagn - 1);
       const msg = randomBuffer(mlen);
@@ -459,7 +507,6 @@ Note:
 
 Params:
 myPublic = my public key
-not stored)
 mySecret = my secret key
 otherPublic = the other sides public key
 nonce = the starting nonce.
@@ -523,7 +570,7 @@ alias generateSecretBoxNonce(Impl=XSalsa20Poly1305) = generateNonce!(Impl);
 
 Params:
   k = the shared secret key
-  nonce = the starting nonce.
+  n = the starting nonce.
 
 Returns: A new secret-key boxer.
 
@@ -605,7 +652,7 @@ void openAuth(Impl=Poly1305, Value, Key)(
 
 
 unittest {
-  import tweednacl.basics : randomBuffer, forgeBuffer;
+  import tweednacl.random: randomBuffer, forgeBuffer;
   import std.random;
   import std.exception;
   import std.digest.digest;
@@ -635,17 +682,19 @@ unittest {
 
 
 
-
+/**
+  Implements a forward-secret session with an ephemeral key usin Impl.
+  
+ */
 auto session(Impl=Curve25519XSalsa20Poly1305)()
 {
   return Session!(Impl)( generateKeypair!Impl() );
 }
 
-/*
-   Creates and uses a session
-*/
 unittest
 {
+  import std.random;
+  import tweednacl.random: randomBuffer;
   // Generates a new keypair.
   auto aliceSession = session();
   auto bobSession = session();
@@ -670,7 +719,7 @@ unittest
 
 }
 
-
+/** Establish a session without authenticating the parties. */
 unittest
 {
     auto aliceSession = session();
@@ -692,6 +741,7 @@ unittest
     testBoxers!4(bobBoxer, aliceBoxer);
 }
 
+/** Establish a session with public-key singing used to authenticating the parties. */
 unittest
 {
 

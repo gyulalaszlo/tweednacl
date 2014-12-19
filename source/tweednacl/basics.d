@@ -119,50 +119,6 @@ pure @safe ubyte[] zeroOut( immutable size_t l )
 }
 
 
-
-version(unittest) {
-  import std.random;
-
-  /**
-  Helper to generate a pseudo-random buffer.
-  The generated random numbers are from std.random, so they are not
-  safe for generating keys. Use
-  */
-  void randomBuffer(T)( T[] m )
-  {
-    foreach(ref e;m) e = uniform(T.min, T.max);
-  }
-
-
-  /** ditto */
-  T[S] randomBuffer(size_t S, T=ubyte)()
-  {
-    T[S] buffer;
-    randomBuffer(buffer);
-    //foreach(ref e;buffer) e = uniform(T.min, T.max);
-    return buffer;
-  }
-
-  /** ditto */
-  T[] randomBuffer(T=ubyte)(size_t s)
-  {
-    T[] buffer;
-    buffer.length = s;
-    randomBuffer(buffer);
-    //foreach(ref e;buffer) e = uniform(T.min, T.max);
-    return buffer;
-  }
-
-  /** Tries to forge $(D count) number of bytes in $(D m) */
-  void forgeBuffer(T)( T[] m, size_t count )
-  {
-    foreach(i;0..count)
-      m[uniform(0,m.length)] = uniform(T.min, T.max);
-  }
-
-}
-
-
 package:
 
 
