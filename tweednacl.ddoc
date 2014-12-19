@@ -9,6 +9,7 @@ DDOC = <!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01//EN" "http://www.w3.org/TR/h
     $(BODY)
     </div>
     </body></html>
+   
 
 DDOC_DITTO     = $(BR)$0
 DDOC_SUMMARY   = $0$(P)
@@ -82,4 +83,44 @@ COPYRIGHT= Copyright &copy; 1999-$(YEAR) by Digital Mars, All Rights Reserved
 H2=<h2>$0</h2>
 SCRIPT = <script type="text/javascript">$0</script>
 
+COMM_TABLE_CSS = <style>
+    .ab_comm_table_head {  }
+    .ab_comm_table_head th { background-color:#ddd; color: #fff; padding: 5px 5px; font-size: 12px; text-transform:uppercase; text-align:center; }
+    .ab_comm_table { width: 90%; margin: 0 auto; }
+    .ab_comm_table_td { width: 48%; padding: 0 1%; }
+    .ab_comm_table_td_a { }
+    .ab_comm_table_td_b { }
+    .ab_comm_table_td_ab .both { padding:0 10%; }
+    .ab_comm_table_td_empty {}
+    .ab_comm_table_label { color:#ccc; text-transform:uppercase; border-bottom: 1px solid #ccc; }
+    
+    </style>
 
+COMM_TABLE_HEADER = <tr class="ab_comm_table_head">
+        <th>Alice</th>
+        <th colspan="2">&larr;&rarr;</th>
+        <th>Bob</th>
+    </tr>
+COMM_TABLE = <table class="ab_comm_table"><thead>$(COMM_TABLE_HEADER)</thead><tbody>$0</tbody><thead>$(COMM_TABLE_HEADER)</thead></table>
+COMM_ROW_A = <tr>
+        <td colspan="2" class="ab_comm_table_td ab_comm_table_td_a">$0</td>
+        <td colspan="2" class="ab_comm_table_td ab_comm_table_td_b ab_comm_table_td_empty"></td>
+    </tr>
+COMM_ROW_B = <tr>
+        <td colspan="2" class="ab_comm_table_td ab_comm_table_td_a ab_comm_table_td_empty"></td>
+        <td colspan="2" class="ab_comm_table_td ab_comm_table_td_b">$0</td>
+    </tr>
+COMM_TD_A = <td colspan="2" class="ab_comm_table_td ab_comm_table_td_a">$0</td>
+COMM_TD_B = <td colspan="2" class="ab_comm_table_td ab_comm_table_td_b">$0</td>
+COMM_ROW = <tr>$0</tr>
+COMM_ROW_AB = <tr>
+        <td colspan="4" class="ab_comm_table_td ab_comm_table_td_ab ab_comm_table_td_empty"><div class="both">$0</div></td>
+    </tr>
+COMM_LABEL = <h4 class="ab_comm_table_label">$0</h4>
+
+
+STD_CRYPTO_HEAD = $(UL
+      $(LI $(LINK2 nacl.html , Rationale / about to NaCl ))
+      $(LI $(LINK2 keys.html , Keys ))
+      $(LI $(LINK2 handshake.html , Handshakes ))
+      )

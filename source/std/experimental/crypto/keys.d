@@ -51,7 +51,7 @@ template Key(Impl, size_t bytes, KeyRole role)
       and the key data, to make this key recognizable and loadable
       using loadKeyString(), and adds an MD5 checksum to the end.
       */
-    string keyString()
+    @property string keyString()
     {
       return encodeKeyString( primitiveName!Impl, Role, data[] );
     }
@@ -87,7 +87,7 @@ template Key(Impl, size_t bytes, KeyRole role)
       and the key data, to make this key recognizable and loadable
       using loadKey().
       */
-    ubyte[] keyData()
+    @property ubyte[] keyData()
     {
       return encodeKeyData( primitiveName!Impl, Role, data );
     }
@@ -385,14 +385,14 @@ unittest
       assert( k2.loadBase64( k1.toBase64() ) );
       assert( k2.data == k1.data );
 
-      assert( K.fromKeyData( k1.keyData() ).data == k1.data);
+      assert( K.fromKeyData( k1.keyData ).data == k1.data);
       K k3;
-      assert( k3.loadKeyData( k1.keyData() ));
+      assert( k3.loadKeyData( k1.keyData ));
       assert( k3.data == k1.data );
 
-      assert( K.fromKeyString( k1.keyString() ).data == k1.data);
+      assert( K.fromKeyString( k1.keyString ).data == k1.data);
       K k4;
-      assert( k4.loadKeyString( k1.keyString() ));
+      assert( k4.loadKeyString( k1.keyString ));
       assert( k4.data == k1.data );
 
 

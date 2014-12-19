@@ -60,9 +60,204 @@ $(UL
   $(LI Perfect Forward Secrecy using ephemeral keys = session())
 )
 
+<hr/>
+$(COMM_TABLE_CSS)
 
-  
+$(H2 Signing messages / Public Key Authentication)
 
+$(COMM_TABLE
+  $(COMM_ROW_AB
+    $(COMM_LABEL Scenario)
+    Bob wants to transfer Alice 1 Million dollars, and needs Alice to send
+    her account number over the wire. Bob has to make sure that he is in fact
+    transfering to Alices account.
+  )
+
+  $(COMM_ROW_A
+    $(COMM_LABEL Generate key)
+    Alice generates a keypair for signing the data.
+
+    ---
+    auto aliceKeys = signKeypair();
+    // deliver the keys to Bob
+    ---
+
+    And signs some data with it.
+
+    ---
+    // send some important banking data
+    auto msg = sign( aliceAccountNumber, aliceKeys.secretKey );
+    sendToBob(msg);
+    ---
+  )
+
+  $(COMM_ROW_B
+    $(COMM_LABEL Verify the authenticity)
+
+    Bob verifies the authenticity of the message:
+    ---
+    // If the message isnt authentic, openSigned throws a BadSignatureError
+    // and the money isnt transferred.
+    transferOneMillionDollars( openSigned( msg, alicePublicKey ) );
+    ---
+  )
+)
+
+
+$(H2 Public-key Encrypted Communication)
+
+$(COMM_TABLE
+  $(COMM_ROW_AB
+    $(COMM_LABEL Scenario)
+    Bob wants to transfer Alice 1 Million dollars, and needs Alice to send
+    her account number over the wire. Bob has to make sure that he is in fact
+    transfering to Alices account.
+  )
+
+  $(COMM_ROW
+    $(COMM_TD_A
+      $(COMM_LABEL Generate key)
+      Alice generates a keypair for signing the data.
+
+      ---
+      auto aliceKeys = boxKeypair();
+      // deliver the public key to Bob
+      ---
+
+      $(COMM_LABEL Create a boxer)
+      ---
+      // exchangedNonce is somehow agreed before starting the communication
+      auto aliceBoxer = boxer( bobPublicKey, aliceKeys.secretKey, exchangedNonce);
+      ---
+
+    )
+
+    $(COMM_TD_B
+      $(COMM_LABEL Generate key)
+      Bob generates a keypair
+      ---
+      auto aliceKeys = boxKeypair();
+      // deliver the public key to Alice
+      ---
+
+      $(COMM_LABEL Create a boxer)
+      ---
+      // exchangedNonce is somehow agreed upon starting the communication
+      auto bobBoxer = boxer( alicePublicKey, bobKeys.secretKey, exchangedNonce);
+      ---
+
+    )
+  )
+
+
+  $(COMM_ROW_A
+    $(COMM_LABEL Encrypt the message)
+
+    Alice uses
+    ---
+    auto msg1 = aliceBoxer.box( aliceBillingData );
+    // send msg1 to Bob
+    ---
+  )
+
+  $(COMM_ROW_B
+    $(COMM_LABEL Decrypt the message and encrypt a reply)
+
+    Bob verifies the authenticity of the message and decrypts it:
+    ---
+    // if the message isnt authentic or damaged, a BadSignatureError
+    // is thrown and the subscription isnt billed.
+    auto billingData = bobBoxer.open( msg1 );
+    ---
+    Bob bills the subscription and creates the subscription, then replies to
+    Alice with her subscription data.
+    ---
+    auto msg2 = bobBoxer.box( subscriptionData );
+    ---
+  )
+
+  $(COMM_ROW_A
+    $(COMM_LABEL Decrypt a message)
+
+    Alice decrypts and verifies her subscription data
+    ---
+    auto subscriptionData = aliceBoxer.open( msg2 );
+    ---
+  )
+)
+
+$(H2 Shared-key Encrypted Communication)
+
+$(COMM_TABLE
+  $(COMM_ROW_AB
+    $(COMM_LABEL Scenario)
+    Bob wants to transfer Alice 1 Million dollars, and needs Alice to send
+    her account number over the wire. Bob has to make sure that he is in fact
+    transfering to Alices account.
+
+    They both agree on a key.
+    ---
+    auto key = secretBoxKey();
+    ---
+  )
+
+  $(COMM_ROW
+    $(COMM_TD_A
+      $(COMM_LABEL Create a boxer)
+
+      ---
+      // exchangedNonce is somehow agreed before starting the communication
+      auto aliceBoxer = secretBoxer( key, exchangedNonce);
+      ---
+
+    )
+
+    $(COMM_TD_B
+      $(COMM_LABEL Create a boxer)
+      ---
+      // exchangedNonce is somehow agreed upon starting the communication
+      auto bobBoxer = secretBoxer( key, exchangedNonce);
+      ---
+
+    )
+  )
+
+
+  $(COMM_ROW_A
+    $(COMM_LABEL Encrypt the message)
+
+    Alice uses
+    ---
+    auto msg1 = aliceBoxer.box( aliceBillingData );
+    // send msg1 to Bob
+    ---
+  )
+
+  $(COMM_ROW_B
+    $(COMM_LABEL Decrypt the message and encrypt a reply)
+
+    Bob verifies the authenticity of the message and decrypts it:
+    ---
+    // if the message isnt authentic or damaged, a BadSignatureError
+    // is thrown and the subscription isnt billed.
+    auto billingData = bobBoxer.open( msg1 );
+    ---
+    Bob bills the subscription and creates the subscription, then replies to
+    Alice with her subscription data.
+    ---
+    auto msg2 = bobBoxer.box( subscriptionData );
+    ---
+  )
+
+  $(COMM_ROW_A
+    $(COMM_LABEL Decrypt a message)
+
+    Alice decrypts and verifies her subscription data
+    ---
+    auto subscriptionData = aliceBoxer.open( msg2 );
+    ---
+  )
+)
 License:
 TweetNaCl is public domain, TweeDNaCl and std.experimental.crypto is available
 under the Boost Public License.
@@ -557,6 +752,9 @@ unittest
   Shortcut that generates a secret key for the default implementation of SecretBoxes.
   */
 alias generateSecretBoxKey(Impl=XSalsa20Poly1305, alias safeRnd=safeRandomBytes) =
+  generateSecretKey!(Impl, safeRnd);
+/** ditto */
+alias secretBoxKey(Impl=XSalsa20Poly1305, alias safeRnd=safeRandomBytes) =
   generateSecretKey!(Impl, safeRnd);
 
 /**

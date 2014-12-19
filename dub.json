@@ -59,7 +59,7 @@
     },
     "docs": {
       "buildOptions":  ["syntaxOnly"],
-      "dflags": ["-c", "-Dddocs", "$PACKAGE_DIR/tweednacl.ddoc"]
+      "dflags": ["-c", "-op", "-Dddocs", "$PACKAGE_DIR/tweednacl.ddoc"]
     }
 
   }
